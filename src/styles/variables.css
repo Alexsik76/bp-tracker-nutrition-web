@@ -1,0 +1,52 @@
+:root {
+  /* Dark Theme Default */
+  --bg-primary: #0D1117;
+  --surface: #141920;
+  --surface-elevated: #1B222D;
+  --surface-border: rgba(255, 255, 255, 0.08);
+  --nav-bar: rgba(17, 21, 28, 0.92);
+  --text-primary: #FFFFFF;
+  --text-muted: rgba(255, 255, 255, 0.45);
+  --text-dim: rgba(255, 255, 255, 0.25);
+
+  /* Primary Accent */
+  --primary: #818CF8;
+  --on-primary: #0B1020;
+  --primary-hover: #98A2F9;
+  --primary-bg-chip: rgba(129, 140, 248, 0.15);
+
+  /* Semantic Colors & Chips */
+  --success: #22C55E;
+  --success-bg-chip: rgba(34, 197, 94, 0.12);
+  --warning: #FB923C;
+  --warning-alt: #F97316;
+  --warning-bg-chip: rgba(249, 115, 22, 0.12);
+  --danger: #EF4444;
+  --danger-bg-chip: rgba(239, 68, 68, 0.12);
+  --info: #38BDF8;
+  --info-bg-chip: rgba(56, 189, 248, 0.12);
+
+  /* Spacing Scale (4 / 8 / 12 / 16 / 20 / 28) */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-28: 28px;
+
+  /* Geometry & Radii */
+  --radius-card: 18px;
+  --radius-control: 14px;
+  --radius-pill: 9999px;
+
+  /* Typography */
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'DM Mono', monospace;
+
+  /* Touch Target */
+  --touch-target-min: 48px;
+
+  /* Safe Area */
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-top: env(safe-area-inset-top, 0px);
+}
