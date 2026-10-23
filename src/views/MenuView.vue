@@ -21,6 +21,7 @@ import type {
   ProductRead,
   OffPlanEntryRead,
   MenuNoteKind,
+  MealSchedule,
 } from '../types/nutrition';
 
 const toastStore = useToastStore();
@@ -29,6 +30,47 @@ const currentDate = ref(formatLocalDate());
 const menus = ref<MenuRead[]>([]);
 const loading = ref(true);
 const generating = ref(false);
+
+const DEFAULT_MEALS: MealSchedule[] = [
+  { name: 'Сніданок', time: '08:30' },
+  { name: 'Обід', time: '13:30' },
+  { name: 'Вечеря', time: '19:00' },
+];
+const FALLBACK_SLOT_ORDER = ['Сніданок', 'Другий сніданок', 'Обід', 'Полуденок', 'Перекус', 'Вечеря'];
+
+const profileMeals = ref<MealSchedule[]>([...DEFAULT_MEALS]);
+const profileSlots = computed(() => profileMeals.value.map((m) => m.name));
+
+function sortMenus(list: MenuRead[]): MenuRead[] {
+  const order = profileSlots.value.length > 0 ? profileSlots.value : FALLBACK_SLOT_ORDER;
+  return [...list].sort((a, b) => {
+    const ai = order.indexOf(a.slot);
+    const bi = order.indexOf(b.slot);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    const fai = FALLBACK_SLOT_ORDER.indexOf(a.slot);
+    const fbi = FALLBACK_SLOT_ORDER.indexOf(b.slot);
+    if (fai !== -1 && fbi !== -1) return fai - fbi;
+    if (fai !== -1) return -1;
+    if (fbi !== -1) return 1;
+    return a.slot.localeCompare(b.slot);
+  });
+}
+
+async function loadProfileMeals() {
+  try {
+    const profile = await nutritionApi.getProfile();
+    if (profile?.meals && profile.meals.length > 0) {
+      profileMeals.value = [...profile.meals].sort((a, b) => a.time.localeCompare(b.time));
+      if (menus.value.length > 0) {
+        menus.value = sortMenus(menus.value);
+      }
+    }
+  } catch {
+    // Keep default 3 meals
+  }
+}
 
 // Generation result extras
 const rationale = ref<string>('');
@@ -115,7 +157,7 @@ async function loadMenu() {
 
   try {
     const res = await nutritionApi.getDayMenus(currentDate.value);
-    menus.value = res || [];
+    menus.value = sortMenus(res || []);
   } catch (err) {
     console.error('Error loading menu:', err);
     toastStore.show('Помилка завантаження меню', 'error');
@@ -144,7 +186,7 @@ async function handleGenerateDay() {
     const result: GenerationResultRead = await nutritionApi.generateMenu(currentDate.value, {
       scope: 'day',
     });
-    menus.value = result.menus;
+    menus.value = sortMenus(result.menus);
     rationale.value = result.rationale || '';
     shoppingList.value = result.shopping_list || [];
     toastStore.show('Меню на день згенеровано!', 'success');
@@ -176,18 +218,10 @@ async function handleGenerateSlot(slotName: string) {
         menus.value[idx] = updatedSlot;
       } else {
         menus.value.push(updatedSlot);
-        const slotOrder = ['Сніданок', 'Другий сніданок', 'Обід', 'Полуденок', 'Вечеря', 'Перекус'];
-        menus.value.sort((a, b) => {
-          const ai = slotOrder.indexOf(a.slot);
-          const bi = slotOrder.indexOf(b.slot);
-          if (ai !== -1 && bi !== -1) return ai - bi;
-          if (ai !== -1) return -1;
-          if (bi !== -1) return 1;
-          return a.slot.localeCompare(b.slot);
-        });
       }
+      menus.value = sortMenus(menus.value);
     } else {
-      menus.value = result.menus;
+      menus.value = sortMenus(result.menus);
     }
     if (result.rationale) rationale.value = result.rationale;
     if (result.shopping_list) shoppingList.value = result.shopping_list;
@@ -436,6 +470,7 @@ function getSlotKcal(menu: MenuRead): number {
 }
 
 onMounted(() => {
+  loadProfileMeals();
   loadMenu();
 });
 </script>
@@ -508,7 +543,7 @@ onMounted(() => {
         </div>
         <div class="slot-quick-grid">
           <button
-            v-for="s in ['Сніданок', 'Обід', 'Вечеря', 'Перекус']"
+            v-for="s in profileSlots"
             :key="s"
             type="button"
             class="btn btn-secondary quick-slot-btn"
