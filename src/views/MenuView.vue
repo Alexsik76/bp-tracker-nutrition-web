@@ -20,6 +20,7 @@ import type {
   DishRead,
   ProductRead,
   OffPlanEntryRead,
+  MenuNoteRead,
   MenuNoteKind,
   MealSchedule,
 } from '../types/nutrition';
@@ -86,6 +87,7 @@ const savingOffPlan = ref(false);
 
 // AI Note / Correction
 const notesSupported = ref(true);
+const savedNotes = ref<MenuNoteRead[]>([]);
 const noteKind = ref<MenuNoteKind>('info');
 const noteText = ref('');
 const noteAnswer = ref<string | null>(null);
@@ -151,27 +153,36 @@ function goToToday() {
 async function loadMenu() {
   loading.value = true;
   menus.value = [];
+  savedNotes.value = [];
+  offPlanEntries.value = [];
   rationale.value = '';
   shoppingList.value = [];
   noteAnswer.value = null;
 
   try {
     const res = await nutritionApi.getDayMenus(currentDate.value);
-    menus.value = sortMenus(res || []);
+    if (res) {
+      menus.value = sortMenus(res.menus || []);
+      savedNotes.value = res.notes || [];
+      if (res.off_plan) {
+        offPlanEntries.value = res.off_plan;
+      }
+    } else {
+      menus.value = [];
+      savedNotes.value = [];
+      if (offPlanSupported.value) {
+        try {
+          offPlanEntries.value = await nutritionApi.getOffPlan(currentDate.value);
+        } catch {
+          offPlanSupported.value = false;
+        }
+      }
+    }
   } catch (err) {
     console.error('Error loading menu:', err);
     toastStore.show('Помилка завантаження меню', 'error');
   } finally {
     loading.value = false;
-  }
-
-  // Load off-plan entries if supported
-  if (offPlanSupported.value) {
-    try {
-      offPlanEntries.value = await nutritionApi.getOffPlan(currentDate.value);
-    } catch {
-      offPlanSupported.value = false;
-    }
   }
 }
 
@@ -450,8 +461,11 @@ async function handleSendNote() {
     }
     if (res.answer) {
       noteAnswer.value = res.answer;
+      savedNotes.value.push(res);
+      noteText.value = '';
       toastStore.show('Отримано відповідь ШІ', 'success');
     } else {
+      noteText.value = '';
       toastStore.show('Повідомлення надіслано', 'info');
     }
     // If correction, reload menu to display adjusted items
@@ -815,15 +829,17 @@ onMounted(() => {
         </button>
       </form>
 
-      <!-- AI Answer block -->
-      <div v-if="noteAnswer" class="ai-answer-box">
-        <div class="ai-answer-header">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-          </svg>
-          <span>Відповідь асистента:</span>
+      <!-- Saved notes list with answers -->
+      <div v-if="savedNotes.length > 0" class="saved-notes-list">
+        <div v-for="note in savedNotes" :key="note.id" class="ai-answer-box">
+          <div class="ai-answer-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            <span>{{ note.kind === 'info' ? 'Запитання' : 'Коригування' }}: {{ note.text }}</span>
+          </div>
+          <div v-if="note.answer" class="ai-answer-content">{{ note.answer }}</div>
         </div>
-        <div class="ai-answer-content">{{ noteAnswer }}</div>
       </div>
     </div>
 
@@ -1444,6 +1460,17 @@ onMounted(() => {
   border: 1px solid rgba(129, 140, 248, 0.25);
   border-radius: var(--radius-control);
   padding: var(--space-12);
+}
+
+.saved-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+}
+
+.saved-notes-list .ai-answer-box {
+  margin-top: 0;
 }
 
 .ai-answer-header {

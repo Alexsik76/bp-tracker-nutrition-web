@@ -28,6 +28,7 @@ import type {
   OffPlanEntryCreate,
   MenuNoteRead,
   MenuNoteCreate,
+  DayMenuRead,
 } from '../types/nutrition';
 
 declare global {
@@ -343,9 +344,9 @@ const realNutritionApi = {
   },
 
   // Menus
-  getDayMenus: async (menuDate: string): Promise<MenuRead[] | null> => {
+  getDayMenus: async (menuDate: string): Promise<DayMenuRead | null> => {
     try {
-      return await request<MenuRead[]>(`/nutrition/menus/${menuDate}`);
+      return await request<DayMenuRead>(`/nutrition/menus/${menuDate}`);
     } catch (err) {
       if (isExpectedEmptyStatus(err)) {
         return null;
