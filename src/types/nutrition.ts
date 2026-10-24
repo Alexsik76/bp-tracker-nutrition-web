@@ -202,3 +202,10 @@ export interface MenuNoteCreate {
   kind: MenuNoteKind;
   text: string;
 }
+
+export interface DayMenuRead {
+  date: string;
+  menus: MenuRead[];
+  notes: MenuNoteRead[];
+  off_plan: OffPlanEntryRead[];
+}

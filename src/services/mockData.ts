@@ -19,6 +19,7 @@ import type {
   OffPlanEntryCreate,
   MenuNoteRead,
   MenuNoteCreate,
+  DayMenuRead,
 } from '../types/nutrition';
 
 let mockProfile: NutritionProfileRead = {
@@ -241,6 +242,7 @@ let mockMenus: MenuRead[] = [
 ];
 
 let mockOffPlan: OffPlanEntryRead[] = [];
+let mockNotes: MenuNoteRead[] = [];
 
 export const mockNutritionApi = {
   getProfile: async (): Promise<NutritionProfileRead> => {
@@ -345,9 +347,13 @@ export const mockNutritionApi = {
     mockDishes = mockDishes.filter((d) => d.id !== dishId);
   },
 
-  getDayMenus: async (menuDate: string): Promise<MenuRead[]> => {
-    // Return mock menus for any date or update date
-    return JSON.parse(JSON.stringify(mockMenus.map((m) => ({ ...m, date: menuDate }))));
+  getDayMenus: async (menuDate: string): Promise<DayMenuRead> => {
+    return {
+      date: menuDate,
+      menus: JSON.parse(JSON.stringify(mockMenus.map((m) => ({ ...m, date: menuDate })))),
+      notes: JSON.parse(JSON.stringify(mockNotes.filter((n) => n.date === menuDate))),
+      off_plan: JSON.parse(JSON.stringify(mockOffPlan.filter((e) => e.date === menuDate))),
+    };
   },
 
   updateMenu: async (menuId: string, data: MenuUpdate): Promise<MenuRead> => {
@@ -506,7 +512,7 @@ export const mockNutritionApi = {
   },
 
   createMenuNote: async (_menuDate: string, data: MenuNoteCreate): Promise<MenuNoteRead> => {
-    return {
+    const note: MenuNoteRead = {
       id: `note-${Date.now()}`,
       user_id: 'dev-bypass-user',
       date: _menuDate,
@@ -517,5 +523,7 @@ export const mockNutritionApi = {
         : 'Меню оновлено з урахуванням вашого коригування.',
       created_at: new Date().toISOString(),
     };
+    mockNotes.push(note);
+    return JSON.parse(JSON.stringify(note));
   },
 };
