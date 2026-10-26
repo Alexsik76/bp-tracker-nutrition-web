@@ -251,10 +251,6 @@ onMounted(async () => {
   font-size: 16px;
 }
 
-.btn-full {
-  width: 100%;
-}
-
 .btn-sm {
   min-height: 38px;
   font-size: 13px;
