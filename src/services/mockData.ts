@@ -160,6 +160,9 @@ let mockMenus: MenuRead[] = [
         kcal_est: 420,
         origin: 'generated',
         position: 0,
+        status: 'eaten',
+        eaten_at: new Date().toISOString(),
+        incomplete: false,
       },
       {
         id: 'item-1b',
@@ -172,6 +175,9 @@ let mockMenus: MenuRead[] = [
         kcal_est: 75,
         origin: 'generated',
         position: 1,
+        status: 'eaten',
+        eaten_at: new Date().toISOString(),
+        incomplete: false,
       },
     ],
     created_at: new Date().toISOString(),
@@ -197,6 +203,9 @@ let mockMenus: MenuRead[] = [
         kcal_est: 380,
         origin: 'generated',
         position: 0,
+        status: null,
+        eaten_at: null,
+        incomplete: false,
       },
       {
         id: 'item-3',
@@ -209,6 +218,9 @@ let mockMenus: MenuRead[] = [
         kcal_est: 35,
         origin: 'manual',
         position: 1,
+        status: null,
+        eaten_at: null,
+        incomplete: false,
       },
     ],
     created_at: new Date().toISOString(),
@@ -234,6 +246,9 @@ let mockMenus: MenuRead[] = [
         kcal_est: 190,
         origin: 'generated',
         position: 0,
+        status: null,
+        eaten_at: null,
+        incomplete: false,
       },
     ],
     created_at: new Date().toISOString(),
@@ -243,6 +258,37 @@ let mockMenus: MenuRead[] = [
 
 let mockOffPlan: OffPlanEntryRead[] = [];
 let mockNotes: MenuNoteRead[] = [];
+
+function deriveMenuState(menu: MenuRead): void {
+  const items = menu.items || [];
+  if (items.length === 0) {
+    menu.status = 'planned';
+    menu.eaten_at = null;
+    return;
+  }
+
+  const eaten = items.filter((i) => i.status === 'eaten');
+  const skipped = items.filter((i) => i.status === 'skipped');
+  const marked = items.filter((i) => i.status !== null);
+
+  if (eaten.length === items.length) {
+    menu.status = 'eaten';
+  } else if (skipped.length === items.length) {
+    menu.status = 'skipped';
+  } else if (marked.length > 0) {
+    menu.status = 'partial';
+  } else if (items.some((i) => i.incomplete)) {
+    menu.status = 'incomplete';
+  } else {
+    menu.status = 'planned';
+  }
+
+  const eatenAts = items
+    .map((i) => i.eaten_at)
+    .filter((t): t is string => Boolean(t))
+    .sort();
+  menu.eaten_at = eatenAts.length > 0 ? eatenAts[eatenAts.length - 1] : null;
+}
 
 export const mockNutritionApi = {
   getProfile: async (): Promise<NutritionProfileRead> => {
@@ -348,6 +394,9 @@ export const mockNutritionApi = {
   },
 
   getDayMenus: async (menuDate: string): Promise<DayMenuRead> => {
+    for (const m of mockMenus) {
+      deriveMenuState(m);
+    }
     return {
       date: menuDate,
       menus: JSON.parse(JSON.stringify(mockMenus.map((m) => ({ ...m, date: menuDate })))),
@@ -359,8 +408,24 @@ export const mockNutritionApi = {
   updateMenu: async (menuId: string, data: MenuUpdate): Promise<MenuRead> => {
     const menu = mockMenus.find((m) => m.id === menuId);
     if (menu) {
-      if (data.status) menu.status = data.status;
-      if (data.eaten_at !== undefined) menu.eaten_at = data.eaten_at;
+      const timestamp = data.eaten_at || new Date().toISOString();
+      if (data.status === 'planned') {
+        for (const item of menu.items) {
+          item.status = null;
+          item.eaten_at = null;
+        }
+      } else if (data.status === 'eaten') {
+        for (const item of menu.items) {
+          item.status = 'eaten';
+          item.eaten_at = timestamp;
+        }
+      } else if (data.status === 'skipped') {
+        for (const item of menu.items) {
+          item.status = 'skipped';
+          item.eaten_at = null;
+        }
+      }
+      deriveMenuState(menu);
       return JSON.parse(JSON.stringify(menu));
     }
     throw new Error('Menu not found');
@@ -391,6 +456,9 @@ export const mockNutritionApi = {
               kcal_est: 380,
               origin: 'generated',
               position: 0,
+              status: null,
+              eaten_at: null,
+              incomplete: false,
             },
             {
               id: `item-${Date.now()}-2`,
@@ -403,6 +471,9 @@ export const mockNutritionApi = {
               kcal_est: 25,
               origin: 'generated',
               position: 1,
+              status: null,
+              eaten_at: null,
+              incomplete: false,
             },
           ],
           created_at: new Date().toISOString(),
@@ -411,7 +482,8 @@ export const mockNutritionApi = {
         mockMenus.push(slotMenu);
       } else {
         slotMenu.regenerations += 1;
-        slotMenu.items = [
+        const markedItems = slotMenu.items.filter((i) => i.status !== null);
+        const newItems: MenuItemRead[] = [
           {
             id: `item-${Date.now()}-1`,
             menu_id: slotMenu.id,
@@ -423,6 +495,9 @@ export const mockNutritionApi = {
             kcal_est: 410,
             origin: 'generated',
             position: 0,
+            status: null,
+            eaten_at: null,
+            incomplete: false,
           },
           {
             id: `item-${Date.now()}-2`,
@@ -435,15 +510,47 @@ export const mockNutritionApi = {
             kcal_est: 30,
             origin: 'generated',
             position: 1,
+            status: null,
+            eaten_at: null,
+            incomplete: false,
           },
         ];
+        slotMenu.items = [...markedItems, ...newItems];
       }
+      deriveMenuState(slotMenu);
 
       return {
         menus: JSON.parse(JSON.stringify(mockMenus.map((m) => ({ ...m, date: menuDate })))),
         rationale: `Окремо згенеровано прийом «${slotName}» з урахуванням цілей харчування.`,
         shopping_list: ['Свіжа зелень', 'Огірки свіжі'],
       };
+    }
+
+    for (const m of mockMenus) {
+      const markedItems = m.items.filter((i) => i.status !== null);
+      if (markedItems.length === m.items.length && m.items.length > 0) {
+        continue;
+      }
+      m.regenerations += 1;
+      const newItems: MenuItemRead[] = [
+        {
+          id: `item-${Date.now()}-${m.id}-1`,
+          menu_id: m.id,
+          dish_id: m.slot === 'Обід' ? 'dish-1' : null,
+          product_id: null,
+          title: `Страва для «${m.slot}» (вар. ${m.regenerations})`,
+          portion_g: 250,
+          portion_text: null,
+          kcal_est: 350,
+          origin: 'generated',
+          position: 0,
+          status: null,
+          eaten_at: null,
+          incomplete: false,
+        },
+      ];
+      m.items = [...markedItems, ...newItems];
+      deriveMenuState(m);
     }
 
     return {
@@ -465,10 +572,14 @@ export const mockNutritionApi = {
       kcal_est: data.kcal_est || 200,
       origin: 'manual',
       position: 99,
+      status: null,
+      eaten_at: null,
+      incomplete: false,
     };
     const target = mockMenus.find((m) => m.slot === slot);
     if (target) {
       target.items.push(newItem);
+      deriveMenuState(target);
     }
     return JSON.parse(JSON.stringify(newItem));
   },
@@ -477,7 +588,24 @@ export const mockNutritionApi = {
     for (const m of mockMenus) {
       const it = m.items.find((i) => i.id === itemId);
       if (it) {
-        Object.assign(it, data);
+        if (data.status !== undefined) {
+          it.status = data.status;
+          if (data.status === 'eaten') {
+            it.eaten_at = data.eaten_at !== undefined ? data.eaten_at : new Date().toISOString();
+          } else {
+            it.eaten_at = null;
+          }
+        } else if (data.eaten_at !== undefined) {
+          it.eaten_at = data.eaten_at;
+        }
+        if (data.dish_id !== undefined) it.dish_id = data.dish_id;
+        if (data.product_id !== undefined) it.product_id = data.product_id;
+        if (data.title !== undefined && data.title !== null) it.title = data.title;
+        if (data.portion_g !== undefined) it.portion_g = data.portion_g;
+        if (data.portion_text !== undefined) it.portion_text = data.portion_text;
+        if (data.kcal_est !== undefined) it.kcal_est = data.kcal_est;
+        if (data.position !== undefined) it.position = data.position;
+        deriveMenuState(m);
         return JSON.parse(JSON.stringify(it));
       }
     }
@@ -486,7 +614,11 @@ export const mockNutritionApi = {
 
   deleteMenuItem: async (itemId: string): Promise<void> => {
     for (const m of mockMenus) {
+      const prevLen = m.items.length;
       m.items = m.items.filter((i) => i.id !== itemId);
+      if (m.items.length !== prevLen) {
+        deriveMenuState(m);
+      }
     }
   },
 

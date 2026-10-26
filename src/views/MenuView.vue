@@ -119,6 +119,7 @@ const editPortionG = ref<number | null>(null);
 const editPortionText = ref('');
 const editKcalEst = ref<number | null>(null);
 const savingEditItem = ref(false);
+const updatingItemId = ref<string | null>(null);
 
 // Total stats
 const totalKcal = computed(() => {
@@ -129,12 +130,12 @@ const totalKcal = computed(() => {
 });
 
 const eatenKcal = computed(() => {
-  return menus.value
-    .filter((m) => m.status === 'eaten')
-    .reduce((total, m) => {
-      const slotKcal = m.items.reduce((s, i) => s + (i.kcal_est || 0), 0);
-      return total + slotKcal;
-    }, 0);
+  return menus.value.reduce((total, m) => {
+    const slotKcal = m.items
+      .filter((i) => i.status === 'eaten')
+      .reduce((s, i) => s + (i.kcal_est || 0), 0);
+    return total + slotKcal;
+  }, 0);
 });
 
 // Navigation functions
@@ -251,53 +252,106 @@ async function handleGenerateSlot(slotName: string) {
 
 // Update Meal Slot Status
 async function updateSlotStatus(menu: MenuRead, nextStatus: MenuStatus) {
-  const prevStatus = menu.status;
-  const prevEatenAt = menu.eaten_at;
-
-  menu.status = nextStatus;
-  menu.eaten_at = nextStatus === 'eaten' ? nowLocalIso() : null;
-
   try {
-    const updated = await nutritionApi.updateMenu(menu.id, {
+    await nutritionApi.updateMenu(menu.id, {
       status: nextStatus,
-      eaten_at: menu.eaten_at,
+      eaten_at: nextStatus === 'eaten' ? nowLocalIso() : null,
     });
-    Object.assign(menu, updated);
     if (nextStatus === 'eaten') {
       toastStore.show(`«${menu.slot}» позначено як з'їдено`, 'success');
+    } else if (nextStatus === 'skipped') {
+      toastStore.show(`«${menu.slot}» пропущено`, 'info');
     } else if (nextStatus === 'planned') {
-      toastStore.show(`«${menu.slot}»: статус «З'їдено» скасовано (залишки відновлено)`, 'info');
+      toastStore.show(`«${menu.slot}»: статус скасовано`, 'info');
     }
+    await loadMenu();
   } catch (err: unknown) {
-    menu.status = prevStatus;
-    menu.eaten_at = prevEatenAt;
+    console.error('Error updating meal status:', err);
     toastStore.show('Помилка оновлення статусу прийому', 'error');
   }
 }
 
-// Prompt to cancel eaten status via confirmation
-async function promptCancelEaten(menu: MenuRead) {
-  if (!confirm(`Скасувати статус «З'їдено» для прийому «${menu.slot}»?`)) {
+// Prompt to cancel meal status via confirmation
+async function promptCancelMeal(menu: MenuRead) {
+  if (!confirm(`Скасувати статус для прийому «${menu.slot}»?`)) {
     return;
   }
   await updateSlotStatus(menu, 'planned');
 }
 
+// Item-level marking actions
+async function handleMarkItemEaten(item: MenuItemRead) {
+  if (updatingItemId.value) return;
+  updatingItemId.value = item.id;
+  try {
+    await nutritionApi.updateMenuItem(item.id, {
+      status: 'eaten',
+      eaten_at: nowLocalIso(),
+    });
+    toastStore.show(`«${item.title}» позначено як з'їдено`, 'success');
+    await loadMenu();
+  } catch (err) {
+    console.error('Error marking item eaten:', err);
+    toastStore.show('Помилка оновлення статусу позиції', 'error');
+  } finally {
+    updatingItemId.value = null;
+  }
+}
+
+async function handleMarkItemSkipped(item: MenuItemRead) {
+  if (updatingItemId.value) return;
+  updatingItemId.value = item.id;
+  try {
+    await nutritionApi.updateMenuItem(item.id, {
+      status: 'skipped',
+      eaten_at: null,
+    });
+    toastStore.show(`«${item.title}» пропущено`, 'info');
+    await loadMenu();
+  } catch (err) {
+    console.error('Error marking item skipped:', err);
+    toastStore.show('Помилка оновлення статусу позиції', 'error');
+  } finally {
+    updatingItemId.value = null;
+  }
+}
+
+async function handleUnmarkItem(item: MenuItemRead) {
+  if (updatingItemId.value) return;
+  updatingItemId.value = item.id;
+  try {
+    await nutritionApi.updateMenuItem(item.id, {
+      status: null,
+      eaten_at: null,
+    });
+    toastStore.show(`«${item.title}»: позначку скасовано`, 'info');
+    await loadMenu();
+  } catch (err) {
+    console.error('Error unmarking item:', err);
+    toastStore.show('Помилка скасування позначки', 'error');
+  } finally {
+    updatingItemId.value = null;
+  }
+}
+
 // Delete item from slot
-async function handleDeleteItem(item: MenuItemRead, menu: MenuRead) {
+async function handleDeleteItem(item: MenuItemRead) {
+  if (item.status !== null) return;
   if (!confirm(`Видалити «${item.title}»?`)) return;
 
   try {
     await nutritionApi.deleteMenuItem(item.id);
-    menu.items = menu.items.filter((i) => i.id !== item.id);
     toastStore.show('Позицію видалено', 'info');
+    await loadMenu();
   } catch (err) {
+    console.error('Error deleting item:', err);
     toastStore.show('Помилка видалення позиції', 'error');
   }
 }
 
 // Open Edit Item modal
 function openEditItemModal(item: MenuItemRead) {
+  if (item.status !== null) return;
   editingItem.value = item;
   editPortionG.value = item.portion_g;
   editPortionText.value = item.portion_text || '';
@@ -306,18 +360,18 @@ function openEditItemModal(item: MenuItemRead) {
 }
 
 async function handleSaveItemEdit() {
-  if (!editingItem.value) return;
+  if (!editingItem.value || editingItem.value.status !== null) return;
 
   savingEditItem.value = true;
   try {
-    const updated = await nutritionApi.updateMenuItem(editingItem.value.id, {
+    await nutritionApi.updateMenuItem(editingItem.value.id, {
       portion_g: editPortionG.value ? Number(editPortionG.value) : null,
       portion_text: editPortionText.value.trim() || null,
       kcal_est: editKcalEst.value ? Number(editKcalEst.value) : null,
     });
-    Object.assign(editingItem.value, updated);
     toastStore.show('Порцію оновлено', 'success');
     isEditItemModalOpen.value = false;
+    await loadMenu();
   } catch (err) {
     toastStore.show('Помилка оновлення порції', 'error');
   } finally {
@@ -377,7 +431,7 @@ async function handleSaveNewItem() {
 
   addingItem.value = true;
   try {
-    const newItem = await nutritionApi.addMenuItem(currentDate.value, activeSlotForAdd.value, {
+    await nutritionApi.addMenuItem(currentDate.value, activeSlotForAdd.value, {
       dish_id: selectedDishId.value,
       product_id: selectedProductId.value,
       title: addItemTitle.value.trim() || undefined,
@@ -386,12 +440,9 @@ async function handleSaveNewItem() {
       kcal_est: addItemKcalEst.value ? Number(addItemKcalEst.value) : undefined,
     });
 
-    const targetMenu = menus.value.find((m) => m.slot === activeSlotForAdd.value);
-    if (targetMenu) {
-      targetMenu.items.push(newItem);
-    }
     toastStore.show('Позицію додано до прийому', 'success');
     isAddItemModalOpen.value = false;
+    await loadMenu();
   } catch (err: unknown) {
     console.error('Error adding item:', err);
     toastStore.show(err instanceof Error ? err.message : 'Помилка додавання', 'error');
@@ -580,6 +631,7 @@ onMounted(() => {
           'slot-incomplete': menu.status === 'incomplete',
           'slot-eaten': menu.status === 'eaten',
           'slot-skipped': menu.status === 'skipped',
+          'slot-partial': menu.status === 'partial',
         }"
       >
         <!-- Slot Header -->
@@ -599,7 +651,41 @@ onMounted(() => {
                 class="btn-icon status-edit-btn"
                 title="Скасувати статус «З'їдено»"
                 aria-label="Скасувати статус «З'їдено»"
-                @click="promptCancelEaten(menu)"
+                @click="promptCancelMeal(menu)"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 20h9"></path>
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                </svg>
+              </button>
+            </template>
+            <template v-else-if="menu.status === 'partial'">
+              <span class="badge badge-primary">
+                Частково
+              </span>
+              <button
+                type="button"
+                class="btn-icon status-edit-btn"
+                title="Скасувати позначки для всього прийому"
+                aria-label="Скасувати позначки для всього прийому"
+                @click="promptCancelMeal(menu)"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 20h9"></path>
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                </svg>
+              </button>
+            </template>
+            <template v-else-if="menu.status === 'skipped'">
+              <span class="badge badge-neutral">
+                Пропущено
+              </span>
+              <button
+                type="button"
+                class="btn-icon status-edit-btn"
+                title="Скасувати статус «Пропущено»"
+                aria-label="Скасувати статус «Пропущено»"
+                @click="promptCancelMeal(menu)"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 20h9"></path>
@@ -609,9 +695,6 @@ onMounted(() => {
             </template>
             <span v-else-if="menu.status === 'incomplete'" class="badge badge-warning">
               Не вистачає продуктів
-            </span>
-            <span v-else-if="menu.status === 'skipped'" class="badge badge-neutral">
-              Пропущено
             </span>
             <span v-else class="badge badge-info">
               Заплановано
@@ -625,13 +708,29 @@ onMounted(() => {
             v-for="item in menu.items"
             :key="item.id"
             class="item-row"
+            :class="{
+              'item-row-eaten': item.status === 'eaten',
+              'item-row-skipped': item.status === 'skipped',
+              'item-row-incomplete': item.incomplete && !item.status,
+            }"
           >
             <div
               class="item-info"
-              :class="{ 'item-info-readonly': menu.status === 'eaten' }"
-              @click="menu.status !== 'eaten' && openEditItemModal(item)"
+              :class="{ 'item-info-readonly': item.status !== null }"
+              @click="item.status === null && openEditItemModal(item)"
             >
-              <div class="item-title">{{ item.title }}</div>
+              <div class="item-title-row">
+                <span class="item-title">{{ item.title }}</span>
+                <span v-if="item.status === 'eaten'" class="badge badge-success item-badge">
+                  ✓ З'їдено
+                </span>
+                <span v-else-if="item.status === 'skipped'" class="badge badge-neutral item-badge">
+                  Пропущено
+                </span>
+                <span v-else-if="item.incomplete" class="badge badge-warning item-badge">
+                  Не вистачає
+                </span>
+              </div>
               <div class="item-meta">
                 <span v-if="item.portion_g" class="num-mono portion-pill">
                   {{ item.portion_g }} г
@@ -648,45 +747,99 @@ onMounted(() => {
               </div>
             </div>
 
-            <div v-if="menu.status !== 'eaten'" class="item-actions">
-              <button
-                class="btn-icon item-btn"
-                @click="openEditItemModal(item)"
-                aria-label="Редагувати порцію"
-                title="Редагувати порцію"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 20h9"></path>
-                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                </svg>
-              </button>
-              <button
-                class="btn-icon item-btn item-del-btn"
-                @click="handleDeleteItem(item, menu)"
-                aria-label="Видалити позицію"
-                title="Видалити позицію"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
+            <div class="item-actions">
+              <!-- Marked item controls: unmark only (read-only until unmarked) -->
+              <template v-if="item.status !== null">
+                <button
+                  type="button"
+                  class="btn-icon item-btn item-unmark-btn"
+                  :disabled="updatingItemId === item.id"
+                  @click.stop="handleUnmarkItem(item)"
+                  title="Зняти позначку"
+                  aria-label="Зняти позначку"
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                </button>
+              </template>
+
+              <!-- Unmarked item controls: mark eaten, mark skipped, edit, delete -->
+              <template v-else>
+                <button
+                  type="button"
+                  class="btn-icon item-btn item-mark-eaten-btn"
+                  :disabled="updatingItemId === item.id"
+                  @click.stop="handleMarkItemEaten(item)"
+                  title="Позначити як з'їдено"
+                  aria-label="Позначити як з'їдено"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="btn-icon item-btn item-mark-skip-btn"
+                  :disabled="updatingItemId === item.id"
+                  @click.stop="handleMarkItemSkipped(item)"
+                  title="Пропустити страву"
+                  aria-label="Пропустити страву"
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                    <line x1="19" y1="5" x2="19" y2="19"></line>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="btn-icon item-btn"
+                  :disabled="updatingItemId === item.id"
+                  @click.stop="openEditItemModal(item)"
+                  title="Редагувати порцію"
+                  aria-label="Редагувати порцію"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="btn-icon item-btn item-del-btn"
+                  :disabled="updatingItemId === item.id"
+                  @click.stop="handleDeleteItem(item)"
+                  title="Видалити позицію"
+                  aria-label="Видалити позицію"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </template>
             </div>
           </div>
         </div>
 
-        <!-- Slot action bar (hidden when eaten) -->
-        <div v-if="menu.status !== 'eaten'" class="slot-footer">
+        <!-- Slot action bar -->
+        <div class="slot-footer">
           <button
+            v-if="menu.status !== 'eaten'"
+            type="button"
             class="btn-action-text"
             @click="openAddItemModal(menu.slot)"
           >
             + Додати позицію
           </button>
+          <div v-else></div>
 
           <div class="slot-buttons">
             <!-- Regenerate slot button -->
             <button
+              v-if="menu.status !== 'eaten'"
+              type="button"
               class="btn-icon slot-ctrl-btn"
               :disabled="generating"
               @click="handleGenerateSlot(menu.slot)"
@@ -699,16 +852,35 @@ onMounted(() => {
               </svg>
             </button>
 
-            <!-- Status buttons -->
+            <!-- Cancel whole meal button (when partial, eaten, or skipped) -->
             <button
+              v-if="menu.status === 'eaten' || menu.status === 'partial' || menu.status === 'skipped'"
+              type="button"
+              class="btn-icon slot-ctrl-btn"
+              @click="promptCancelMeal(menu)"
+              title="Скасувати позначки для всього прийому"
+              aria-label="Скасувати позначки для всього прийому"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+              </svg>
+            </button>
+
+            <!-- Whole meal eaten button -->
+            <button
+              v-if="menu.status !== 'eaten'"
+              type="button"
               class="btn btn-primary btn-sm-action"
               @click="updateSlotStatus(menu, 'eaten')"
             >
               ✓ З'їдено
             </button>
 
+            <!-- Whole meal skipped button -->
             <button
-              v-if="menu.status !== 'skipped'"
+              v-if="menu.status !== 'skipped' && menu.status !== 'eaten'"
+              type="button"
               class="btn-icon slot-ctrl-btn"
               @click="updateSlotStatus(menu, 'skipped')"
               title="Пропустити прийом"
@@ -1163,6 +1335,10 @@ onMounted(() => {
   opacity: 0.65;
 }
 
+.slot-partial {
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
 .slot-header {
   display: flex;
   align-items: center;
@@ -1194,8 +1370,8 @@ onMounted(() => {
 }
 
 .status-edit-btn {
-  min-width: 32px;
-  min-height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   color: var(--text-muted);
   border-radius: var(--radius-pill);
@@ -1214,16 +1390,34 @@ onMounted(() => {
 
 .item-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   background: rgba(255, 255, 255, 0.03);
   padding: var(--space-8) var(--space-12);
   border-radius: var(--radius-control);
   border: 1px solid rgba(255, 255, 255, 0.04);
+  gap: var(--space-8);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.item-row-eaten {
+  border-color: rgba(34, 197, 94, 0.25);
+  background: rgba(34, 197, 94, 0.04);
+}
+
+.item-row-skipped {
+  opacity: 0.65;
+}
+
+.item-row-incomplete {
+  border-color: rgba(251, 146, 60, 0.35);
+  background: rgba(249, 115, 22, 0.04);
 }
 
 .item-info {
-  flex: 1;
+  flex: 1 1 180px;
+  min-width: 0;
   cursor: pointer;
 }
 
@@ -1231,11 +1425,28 @@ onMounted(() => {
   cursor: default;
 }
 
+.item-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
 .item-title {
   font-size: 14.5px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 3px;
+  word-break: break-word;
+}
+
+.item-row-skipped .item-title {
+  text-decoration: line-through;
+}
+
+.item-badge {
+  font-size: 11px;
+  padding: 2px 7px;
 }
 
 .item-meta {
@@ -1263,16 +1474,47 @@ onMounted(() => {
 .item-actions {
   display: flex;
   align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
 
 .item-btn {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
+  border-radius: var(--radius-control);
+}
+
+.item-mark-eaten-btn {
+  color: var(--text-muted);
+}
+
+.item-mark-eaten-btn:hover {
+  color: var(--success);
+  background: var(--success-bg-chip);
+}
+
+.item-mark-skip-btn {
+  color: var(--text-muted);
+}
+
+.item-mark-skip-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.item-unmark-btn {
+  color: var(--text-muted);
+}
+
+.item-unmark-btn:hover {
+  color: var(--warning);
+  background: var(--warning-bg-chip);
 }
 
 .item-del-btn:hover {
   color: var(--danger);
+  background: var(--danger-bg-chip);
 }
 
 .slot-footer {
@@ -1291,6 +1533,9 @@ onMounted(() => {
   font-weight: 600;
   cursor: pointer;
   padding: 6px 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .slot-buttons {
@@ -1300,8 +1545,8 @@ onMounted(() => {
 }
 
 .slot-ctrl-btn {
-  min-width: 38px;
-  min-height: 38px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-control);
   background: rgba(255, 255, 255, 0.05);
 }
@@ -1311,7 +1556,7 @@ onMounted(() => {
 }
 
 .btn-sm-action {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 var(--space-12);
   font-size: 13px;
 }
