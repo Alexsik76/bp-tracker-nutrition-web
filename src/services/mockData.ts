@@ -598,8 +598,28 @@ export const mockNutritionApi = {
         } else if (data.eaten_at !== undefined) {
           it.eaten_at = data.eaten_at;
         }
-        if (data.dish_id !== undefined) it.dish_id = data.dish_id;
-        if (data.product_id !== undefined) it.product_id = data.product_id;
+        if (data.dish_id !== undefined) {
+          it.dish_id = data.dish_id;
+          if (data.dish_id) {
+            it.product_id = null;
+            it.incomplete = false;
+            if (data.title === undefined || data.title === null) {
+              const d = mockDishes.find((dish) => dish.id === data.dish_id);
+              if (d) it.title = d.name;
+            }
+          }
+        }
+        if (data.product_id !== undefined) {
+          it.product_id = data.product_id;
+          if (data.product_id) {
+            it.dish_id = null;
+            it.incomplete = false;
+            if (data.title === undefined || data.title === null) {
+              const p = mockProducts.find((prod) => prod.id === data.product_id);
+              if (p) it.title = p.name;
+            }
+          }
+        }
         if (data.title !== undefined && data.title !== null) it.title = data.title;
         if (data.portion_g !== undefined) it.portion_g = data.portion_g;
         if (data.portion_text !== undefined) it.portion_text = data.portion_text;

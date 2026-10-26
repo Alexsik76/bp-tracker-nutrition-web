@@ -12,9 +12,11 @@ import LoadingSpinner from '../components/LoadingSpinner.vue';
 import EmptyState from '../components/EmptyState.vue';
 import ModalSheet from '../components/ModalSheet.vue';
 import SegmentedControl from '../components/SegmentedControl.vue';
+import DishProductPicker from '../components/DishProductPicker.vue';
 import type {
   MenuRead,
   MenuItemRead,
+  MenuItemUpdate,
   MenuStatus,
   GenerationResultRead,
   DishRead,
@@ -120,6 +122,17 @@ const editPortionText = ref('');
 const editKcalEst = ref<number | null>(null);
 const savingEditItem = ref(false);
 const updatingItemId = ref<string | null>(null);
+
+// Modal: Replace item in slot
+const isReplaceModalOpen = ref(false);
+const replacingItem = ref<MenuItemRead | null>(null);
+const replaceSourceType = ref<'dish' | 'product'>('dish');
+const selectedReplaceDishId = ref<string | null>(null);
+const selectedReplaceProductId = ref<string | null>(null);
+const replacePortionG = ref<number | null>(null);
+const replacePortionText = ref('');
+const replaceKcalEst = ref<number | null>(null);
+const savingReplaceItem = ref(false);
 
 // Total stats
 const totalKcal = computed(() => {
@@ -359,6 +372,20 @@ function openEditItemModal(item: MenuItemRead) {
   isEditItemModalOpen.value = true;
 }
 
+function openReplaceFromEdit() {
+  if (!editingItem.value || editingItem.value.status !== null) return;
+  const item = editingItem.value;
+  isEditItemModalOpen.value = false;
+  openReplaceItemModal(item);
+}
+
+async function handleDeleteItemFromEdit() {
+  if (!editingItem.value || editingItem.value.status !== null) return;
+  const item = editingItem.value;
+  isEditItemModalOpen.value = false;
+  await handleDeleteItem(item);
+}
+
 async function handleSaveItemEdit() {
   if (!editingItem.value || editingItem.value.status !== null) return;
 
@@ -367,7 +394,7 @@ async function handleSaveItemEdit() {
     await nutritionApi.updateMenuItem(editingItem.value.id, {
       portion_g: editPortionG.value ? Number(editPortionG.value) : null,
       portion_text: editPortionText.value.trim() || null,
-      kcal_est: editKcalEst.value ? Number(editKcalEst.value) : null,
+      kcal_est: editKcalEst.value !== null && editKcalEst.value !== undefined ? Number(editKcalEst.value) : null,
     });
     toastStore.show('Порцію оновлено', 'success');
     isEditItemModalOpen.value = false;
@@ -376,6 +403,84 @@ async function handleSaveItemEdit() {
     toastStore.show('Помилка оновлення порції', 'error');
   } finally {
     savingEditItem.value = false;
+  }
+}
+
+async function loadInventory() {
+  try {
+    const [dishes, prods] = await Promise.all([
+      nutritionApi.getDishes(undefined, true),
+      nutritionApi.getProducts(),
+    ]);
+    availableDishes.value = dishes;
+    availableProducts.value = prods.filter((p) => p.availability !== 'out');
+  } catch (err) {
+    console.error('Error fetching inventory:', err);
+  }
+}
+
+// Open Replace Item modal
+async function openReplaceItemModal(item: MenuItemRead) {
+  if (item.status !== null) return;
+  replacingItem.value = item;
+  replaceSourceType.value = item.dish_id ? 'dish' : (item.product_id ? 'product' : 'dish');
+  selectedReplaceDishId.value = null;
+  selectedReplaceProductId.value = null;
+  replacePortionG.value = item.portion_g;
+  replacePortionText.value = item.portion_text || '';
+  replaceKcalEst.value = item.kcal_est;
+
+  isReplaceModalOpen.value = true;
+  await loadInventory();
+}
+
+function onSelectReplaceDish(dish: DishRead) {
+  selectedReplaceDishId.value = dish.id;
+  selectedReplaceProductId.value = null;
+  if (dish.remaining_g) {
+    replacePortionG.value = Math.min(250, dish.remaining_g);
+    replacePortionText.value = '';
+  }
+}
+
+function onSelectReplaceProduct(prod: ProductRead) {
+  selectedReplaceProductId.value = prod.id;
+  selectedReplaceDishId.value = null;
+  if (prod.daily_limit_g) {
+    replacePortionG.value = prod.daily_limit_g;
+    replacePortionText.value = '';
+  }
+}
+
+async function handleSaveReplaceItem() {
+  if (!replacingItem.value || replacingItem.value.status !== null) return;
+  const isDish = replaceSourceType.value === 'dish';
+  const dishId = isDish ? selectedReplaceDishId.value : undefined;
+  const productId = !isDish ? selectedReplaceProductId.value : undefined;
+
+  if (!dishId && !productId) {
+    toastStore.show('Оберіть страву або продукт зі списку', 'warning');
+    return;
+  }
+
+  savingReplaceItem.value = true;
+  try {
+    const payload: MenuItemUpdate = {
+      dish_id: dishId,
+      product_id: productId,
+      portion_g: replacePortionG.value ? Number(replacePortionG.value) : null,
+      portion_text: replacePortionText.value.trim() || null,
+      kcal_est: replaceKcalEst.value !== null && replaceKcalEst.value !== undefined ? Number(replaceKcalEst.value) : null,
+    };
+    await nutritionApi.updateMenuItem(replacingItem.value.id, payload);
+    toastStore.show('Позицію замінено', 'success');
+    isReplaceModalOpen.value = false;
+    await loadMenu();
+  } catch (err: unknown) {
+    console.error('Error replacing item:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка заміни позиції', 'error');
+  } finally {
+    savingReplaceItem.value = false;
   }
 }
 
@@ -391,17 +496,7 @@ async function openAddItemModal(slot: string) {
   addItemKcalEst.value = null;
 
   isAddItemModalOpen.value = true;
-
-  try {
-    const [dishes, prods] = await Promise.all([
-      nutritionApi.getDishes(undefined, true),
-      nutritionApi.getProducts(),
-    ]);
-    availableDishes.value = dishes;
-    availableProducts.value = prods.filter((p) => p.availability !== 'out');
-  } catch (err) {
-    console.error('Error fetching inventory for add item:', err);
-  }
+  await loadInventory();
 }
 
 function onSelectDish(dish: DishRead) {
@@ -717,6 +812,7 @@ onMounted(() => {
             <div
               class="item-info"
               :class="{ 'item-info-readonly': item.status !== null }"
+              :title="item.status === null ? 'Натисніть для редагування або заміни' : undefined"
               @click="item.status === null && openEditItemModal(item)"
             >
               <div class="item-title-row">
@@ -765,7 +861,7 @@ onMounted(() => {
                 </button>
               </template>
 
-              <!-- Unmarked item controls: mark eaten, mark skipped, edit, delete -->
+              <!-- Unmarked item controls: direct mark eaten / mark skipped buttons; edit/replace/delete in edit sheet -->
               <template v-else>
                 <button
                   type="button"
@@ -790,32 +886,6 @@ onMounted(() => {
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 4 15 12 5 20 5 4"></polygon>
                     <line x1="19" y1="5" x2="19" y2="19"></line>
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class="btn-icon item-btn"
-                  :disabled="updatingItemId === item.id"
-                  @click.stop="openEditItemModal(item)"
-                  title="Редагувати порцію"
-                  aria-label="Редагувати порцію"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 20h9"></path>
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  class="btn-icon item-btn item-del-btn"
-                  :disabled="updatingItemId === item.id"
-                  @click.stop="handleDeleteItem(item)"
-                  title="Видалити позицію"
-                  aria-label="Видалити позицію"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>
                 </button>
               </template>
@@ -1022,62 +1092,15 @@ onMounted(() => {
       @close="isAddItemModalOpen = false"
     >
       <form @submit.prevent="handleSaveNewItem" class="add-item-form">
-        <div class="form-group">
-          <label class="form-label">Джерело</label>
-          <SegmentedControl
-            v-model="addItemSourceType"
-            :options="[
-              { label: 'Готова страва', value: 'dish' },
-              { label: 'Продукт', value: 'product' },
-            ]"
-          />
-        </div>
-
-        <!-- Dishes picker -->
-        <div v-if="addItemSourceType === 'dish'" class="picker-section">
-          <label class="form-label">Оберіть страву з холодильника</label>
-          <div v-if="availableDishes.length === 0" class="picker-empty">
-            Немає готових страв у наявності
-          </div>
-          <div v-else class="picker-list">
-            <button
-              v-for="dish in availableDishes"
-              :key="dish.id"
-              type="button"
-              class="picker-item"
-              :class="{ selected: selectedDishId === dish.id }"
-              @click="onSelectDish(dish)"
-            >
-              <span class="picker-item-name">{{ dish.name }}</span>
-              <span class="picker-item-sub num-mono">
-                залишок: {{ dish.remaining_g ?? dish.cooked_weight_g }} г
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Products picker -->
-        <div v-else class="picker-section">
-          <label class="form-label">Оберіть продукт</label>
-          <div v-if="availableProducts.length === 0" class="picker-empty">
-            Немає продуктів у наявності
-          </div>
-          <div v-else class="picker-list">
-            <button
-              v-for="prod in availableProducts"
-              :key="prod.id"
-              type="button"
-              class="picker-item"
-              :class="{ selected: selectedProductId === prod.id }"
-              @click="onSelectProduct(prod)"
-            >
-              <span class="picker-item-name">{{ prod.name }}</span>
-              <span v-if="prod.daily_limit_g" class="picker-item-sub num-mono">
-                ліміт: {{ prod.daily_limit_g }}г
-              </span>
-            </button>
-          </div>
-        </div>
+        <DishProductPicker
+          v-model:source-type="addItemSourceType"
+          :available-dishes="availableDishes"
+          :available-products="availableProducts"
+          :selected-dish-id="selectedDishId"
+          :selected-product-id="selectedProductId"
+          @select-dish="onSelectDish"
+          @select-product="onSelectProduct"
+        />
 
         <div class="grid-2">
           <div class="form-group">
@@ -1120,7 +1143,7 @@ onMounted(() => {
           <button
             type="submit"
             class="btn btn-primary btn-full"
-            :disabled="addingItem || (!selectedDishId && !selectedProductId)"
+            :disabled="addingItem || (addItemSourceType === 'dish' ? !selectedDishId : !selectedProductId)"
           >
             {{ addingItem ? 'Додаємо...' : 'Додати до меню' }}
           </button>
@@ -1128,10 +1151,10 @@ onMounted(() => {
       </form>
     </ModalSheet>
 
-    <!-- Modal: Edit Item Portion -->
+    <!-- Modal: Edit Item Portion & Actions -->
     <ModalSheet
       :show="isEditItemModalOpen"
-      :title="`Порція: ${editingItem?.title}`"
+      :title="editingItem?.title ? `Позиція: ${editingItem.title}` : 'Позиція меню'"
       @close="isEditItemModalOpen = false"
     >
       <form @submit.prevent="handleSaveItemEdit" class="edit-item-form">
@@ -1176,7 +1199,87 @@ onMounted(() => {
             class="btn btn-primary btn-full"
             :disabled="savingEditItem"
           >
-            {{ savingEditItem ? 'Збереження...' : 'Оновити порцію' }}
+            {{ savingEditItem ? 'Збереження...' : 'Зберегти порцію' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary btn-full"
+            @click="openReplaceFromEdit"
+          >
+            Замінити позицію...
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger btn-full"
+            @click="handleDeleteItemFromEdit"
+          >
+            Видалити позицію
+          </button>
+        </div>
+      </form>
+    </ModalSheet>
+
+    <!-- Modal: Replace Item in Slot -->
+    <ModalSheet
+      :show="isReplaceModalOpen"
+      :title="replacingItem?.title ? `Замінити «${replacingItem.title}»` : 'Заміна позиції'"
+      @close="isReplaceModalOpen = false"
+    >
+      <form @submit.prevent="handleSaveReplaceItem" class="replace-item-form">
+        <DishProductPicker
+          v-model:source-type="replaceSourceType"
+          :available-dishes="availableDishes"
+          :available-products="availableProducts"
+          :selected-dish-id="selectedReplaceDishId"
+          :selected-product-id="selectedReplaceProductId"
+          @select-dish="onSelectReplaceDish"
+          @select-product="onSelectReplaceProduct"
+        />
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label" for="replacePortionG">Порція (г)</label>
+            <input
+              id="replacePortionG"
+              v-model.number="replacePortionG"
+              type="number"
+              class="form-input num-mono"
+              placeholder="Напр. 200"
+              min="1"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="replacePortionText">Або опис порції</label>
+            <input
+              id="replacePortionText"
+              v-model="replacePortionText"
+              type="text"
+              class="form-input"
+              placeholder="2 шт, 1 чашка..."
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="replaceKcalEst">Оцінка ккал (опційно)</label>
+          <input
+            id="replaceKcalEst"
+            v-model.number="replaceKcalEst"
+            type="number"
+            class="form-input num-mono"
+            placeholder="Напр. 350"
+            min="0"
+          />
+        </div>
+
+        <div class="modal-actions-area">
+          <button
+            type="submit"
+            class="btn btn-primary btn-full"
+            :disabled="savingReplaceItem || (replaceSourceType === 'dish' ? !selectedReplaceDishId : !selectedReplaceProductId)"
+          >
+            {{ savingReplaceItem ? 'Заміна...' : 'Замінити' }}
           </button>
         </div>
       </form>
@@ -1743,59 +1846,6 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-}
-
-.picker-section {
-  margin-bottom: var(--space-16);
-}
-
-.picker-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 180px;
-  overflow-y: auto;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-control);
-  padding: 4px;
-}
-
-.picker-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-8) var(--space-12);
-  border-radius: var(--radius-control);
-  background: transparent;
-  border: 1px solid transparent;
-  cursor: pointer;
-  text-align: left;
-}
-
-.picker-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.picker-item.selected {
-  background: var(--primary-bg-chip);
-  border-color: var(--primary);
-}
-
-.picker-item-name {
-  font-size: 13.5px;
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.picker-item-sub {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.picker-empty {
-  font-size: 13px;
-  color: var(--text-muted);
-  padding: var(--space-12) 0;
 }
 
 .grid-2 {
