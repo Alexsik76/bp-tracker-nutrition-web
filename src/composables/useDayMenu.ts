@@ -10,7 +10,6 @@ import type {
   MenuRead,
   MenuItemRead,
   MenuItemUpdate,
-  MenuStatus,
   MealCreate,
   GenerationResultRead,
   OffPlanEntryRead,
@@ -88,8 +87,6 @@ export function useDayMenu() {
   const noteAnswer = ref<string | null>(null);
   const sendingNote = ref(false);
 
-  const updatingItemId = ref<string | null>(null);
-
   async function loadProfileMeals() {
     try {
       const profile = await nutritionApi.getProfile();
@@ -111,9 +108,8 @@ export function useDayMenu() {
 
   const eatenKcal = computed(() => {
     return menus.value.reduce((total, m) => {
-      const slotKcal = m.items
-        .filter((i) => i.status === 'eaten')
-        .reduce((s, i) => s + (i.kcal_est || 0), 0);
+      if (m.status !== 'eaten') return total;
+      const slotKcal = m.items.reduce((s, i) => s + (i.kcal_est || 0), 0);
       return total + slotKcal;
     }, 0);
   });
@@ -202,15 +198,7 @@ export function useDayMenu() {
       rationale.value = result.rationale || '';
       shoppingList.value = result.shopping_list || [];
       toastStore.show('Меню на день згенеровано!', 'success');
-      try {
-        const refreshed = await nutritionApi.getDayMenus(currentDate.value);
-        if (refreshed) {
-          canGenerateDay.value = refreshed.can_generate_day ?? true;
-          dayGenerationReplacesManual.value = refreshed.day_generation_replaces_manual ?? false;
-        }
-      } catch {
-        dayGenerationReplacesManual.value = false;
-      }
+      await loadMenu();
     } catch (err: unknown) {
       console.error('Day generation error:', err);
       if (err instanceof ApiError && err.status === 409) {
@@ -233,30 +221,10 @@ export function useDayMenu() {
         scope: 'slot',
         slot: slotName,
       });
-      const updatedSlot = result.menus.find((m) => m.slot === slotName);
-      if (updatedSlot) {
-        const idx = menus.value.findIndex((m) => m.slot === slotName);
-        if (idx !== -1) {
-          menus.value[idx] = updatedSlot;
-        } else {
-          menus.value.push(updatedSlot);
-        }
-      } else {
-        menus.value = result.menus;
-      }
-      dayKcalIncomplete.value = menus.value.some((m) => m.kcal_incomplete);
       if (result.rationale) rationale.value = result.rationale;
       if (result.shopping_list) shoppingList.value = result.shopping_list;
       toastStore.show(`Прийом «${slotName}» успішно згенеровано!`, 'success');
-      try {
-        const refreshed = await nutritionApi.getDayMenus(currentDate.value);
-        if (refreshed) {
-          canGenerateDay.value = refreshed.can_generate_day ?? true;
-          dayGenerationReplacesManual.value = refreshed.day_generation_replaces_manual ?? false;
-        }
-      } catch {
-        // Ignore background refresh failure
-      }
+      await loadMenu();
     } catch (err: unknown) {
       console.error('Slot generation error:', err);
       if (err instanceof ApiError && err.status === 409) {
@@ -270,17 +238,18 @@ export function useDayMenu() {
     }
   }
 
-  // Update Meal Slot Status
-  async function updateSlotStatus(menu: MenuRead, nextStatus: MenuStatus) {
+  // Toggle Meal Eaten Status
+  async function handleToggleMealEaten(menu: MenuRead) {
     if (!menu.id) return;
+    const isEaten = menu.status === 'eaten';
+    const nextEatenAt = isEaten ? null : nowLocalIso();
     try {
       await nutritionApi.updateMenu(menu.id, {
-        status: nextStatus,
-        eaten_at: nextStatus === 'eaten' ? nowLocalIso() : null,
+        eaten_at: nextEatenAt,
       });
-      if (nextStatus === 'eaten') {
+      if (nextEatenAt) {
         toastStore.show(`«${menu.slot}» позначено як з'їдено`, 'success');
-      } else if (nextStatus === 'planned') {
+      } else {
         toastStore.show(`«${menu.slot}»: статус скасовано`, 'info');
       }
       await loadMenu();
@@ -294,19 +263,10 @@ export function useDayMenu() {
     }
   }
 
-  // Prompt to cancel meal status via confirmation
-  async function promptCancelMeal(menu: MenuRead) {
-    if (!menu.id) return;
-    if (!confirm(`Скасувати статус для прийому «${menu.slot}»?`)) {
-      return;
-    }
-    await updateSlotStatus(menu, 'planned');
-  }
-
   // Delete whole meal from this day after confirmation
   async function handleDeleteMeal(menu: MenuRead) {
-    if (menu.status === 'eaten' || menu.items.some((i) => i.status === 'eaten')) {
-      toastStore.show('Не можна видалити прийом зі зʼїденими позиціями (спочатку зніміть позначку «з\'їдено»)', 'warning');
+    if (menu.status === 'eaten') {
+      toastStore.show('Не можна видалити зʼїдений прийом (спочатку зніміть позначку «з\'їдено»)', 'warning');
       return;
     }
     const confirmMessage = menu.pinned
@@ -326,7 +286,7 @@ export function useDayMenu() {
     } catch (err: unknown) {
       console.error('Error deleting meal:', err);
       if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(getErrorMessage(err, 'Не можна видалити прийом, що містить зʼїдені позиції'), 'warning');
+        toastStore.show(getErrorMessage(err, 'Не можна видалити зʼїдений прийом'), 'warning');
       } else {
         toastStore.show(err instanceof Error ? err.message : 'Помилка видалення прийому', 'error');
       }
@@ -367,76 +327,10 @@ export function useDayMenu() {
     }
   }
 
-  // Item-level marking actions
-  async function handleMarkItemEaten(item: MenuItemRead) {
-    if (updatingItemId.value) return;
-    updatingItemId.value = item.id;
-    try {
-      await nutritionApi.updateMenuItem(item.id, {
-        status: 'eaten',
-        eaten_at: nowLocalIso(),
-      });
-      toastStore.show(`«${item.title}» позначено як з'їдено`, 'success');
-      await loadMenu();
-    } catch (err: unknown) {
-      console.error('Error marking item eaten:', err);
-      if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(getErrorMessage(err, 'Помилка оновлення статусу позиції'), 'warning');
-      } else {
-        toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення статусу позиції', 'error');
-      }
-    } finally {
-      updatingItemId.value = null;
-    }
-  }
-
-  async function handleMarkItemSkipped(item: MenuItemRead) {
-    if (updatingItemId.value) return;
-    updatingItemId.value = item.id;
-    try {
-      await nutritionApi.updateMenuItem(item.id, {
-        status: 'skipped',
-        eaten_at: null,
-      });
-      toastStore.show(`«${item.title}» пропущено`, 'info');
-      await loadMenu();
-    } catch (err: unknown) {
-      console.error('Error marking item skipped:', err);
-      if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(getErrorMessage(err, 'Помилка оновлення статусу позиції'), 'warning');
-      } else {
-        toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення статусу позиції', 'error');
-      }
-    } finally {
-      updatingItemId.value = null;
-    }
-  }
-
-  async function handleUnmarkItem(item: MenuItemRead) {
-    if (updatingItemId.value) return;
-    updatingItemId.value = item.id;
-    try {
-      await nutritionApi.updateMenuItem(item.id, {
-        status: null,
-        eaten_at: null,
-      });
-      toastStore.show(`«${item.title}»: позначку скасовано`, 'info');
-      await loadMenu();
-    } catch (err: unknown) {
-      console.error('Error unmarking item:', err);
-      if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(getErrorMessage(err, 'Помилка скасування позначки'), 'warning');
-      } else {
-        toastStore.show(err instanceof Error ? err.message : 'Помилка скасування позначки', 'error');
-      }
-    } finally {
-      updatingItemId.value = null;
-    }
-  }
-
   async function handleDeleteItem(item: MenuItemRead) {
-    if (item.status === 'eaten') {
-      toastStore.show('Зʼїдену позицію не можна видалити (спочатку зніміть позначку «з\'їдено»)', 'warning');
+    const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === item.id));
+    if (parentMenu?.status === 'eaten') {
+      toastStore.show('Зʼїдений прийом їжі не можна змінювати (спочатку зніміть позначку «з\'їдено»)', 'warning');
       return;
     }
     if (!confirm(`Видалити «${item.title}»?`)) return;
@@ -448,7 +342,7 @@ export function useDayMenu() {
     } catch (err: unknown) {
       console.error('Error deleting item:', err);
       if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(getErrorMessage(err, 'Зʼїдену позицію не можна видалити'), 'warning');
+        toastStore.show(getErrorMessage(err, 'Зʼїдений прийом їжі не можна змінювати'), 'warning');
       } else {
         toastStore.show(err instanceof Error ? err.message : 'Помилка видалення позиції', 'error');
       }
@@ -492,9 +386,9 @@ export function useDayMenu() {
     portionText?: string | null;
     kcalEst?: number | null;
   }) {
-    const currentItem = menus.value.flatMap((m) => m.items).find((i) => i.id === itemId);
-    if (currentItem?.status === 'eaten') {
-      toastStore.show('Зʼїдену позицію не можна редагувати (спочатку зніміть позначку «з\'їдено»)', 'warning');
+    const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === itemId));
+    if (parentMenu?.status === 'eaten') {
+      toastStore.show('Зʼїдений прийом їжі не можна редагувати (спочатку зніміть позначку «з\'їдено»)', 'warning');
       return false;
     }
     try {
@@ -510,7 +404,7 @@ export function useDayMenu() {
     } catch (err: unknown) {
       console.error('Error updating item:', err);
       if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(getErrorMessage(err, 'Зʼїдену позицію не можна редагувати'), 'warning');
+        toastStore.show(getErrorMessage(err, 'Зʼїдений прийом їжі не можна редагувати'), 'warning');
       } else {
         toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення позиції', 'error');
       }
@@ -540,9 +434,9 @@ export function useDayMenu() {
     portionText?: string | null;
     kcalEst?: number | null;
   }) {
-    const currentItem = menus.value.flatMap((m) => m.items).find((i) => i.id === itemId);
-    if (currentItem?.status === 'eaten') {
-      toastStore.show('Зʼїдену позицію не можна замінити (спочатку зніміть позначку «з\'їдено»)', 'warning');
+    const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === itemId));
+    if (parentMenu?.status === 'eaten') {
+      toastStore.show('Зʼїдений прийом їжі не можна замінити (спочатку зніміть позначку «з\'їдено»)', 'warning');
       return false;
     }
     try {
@@ -560,7 +454,7 @@ export function useDayMenu() {
     } catch (err: unknown) {
       console.error('Error replacing item:', err);
       if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(getErrorMessage(err, 'Зʼїдену позицію не можна замінити'), 'warning');
+        toastStore.show(getErrorMessage(err, 'Зʼїдений прийом їжі не можна замінити'), 'warning');
       } else {
         toastStore.show(err instanceof Error ? err.message : 'Помилка заміни позиції', 'error');
       }
@@ -664,7 +558,6 @@ export function useDayMenu() {
     savedNotes,
     noteAnswer,
     sendingNote,
-    updatingItemId,
     totalKcal,
     eatenKcal,
     dayKcalIncomplete,
@@ -678,14 +571,10 @@ export function useDayMenu() {
     handleGenerateDay,
     handleGenerateSlot,
     handleEstimateSlot,
-    updateSlotStatus,
-    promptCancelMeal,
+    handleToggleMealEaten,
     handleDeleteMeal,
     handlePinMeal,
     handleCreateMeal,
-    handleMarkItemEaten,
-    handleMarkItemSkipped,
-    handleUnmarkItem,
     handleDeleteItem,
     handleAddMenuItem,
     handleUpdateItemPortion,

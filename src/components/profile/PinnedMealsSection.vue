@@ -55,8 +55,6 @@ const editingItemProxy = computed<MenuItemRead | null>(() => {
     kcal_source: editingPinItem.value.kcal_est ? 'user' : null,
     origin: 'manual',
     position: editingPinItem.value.position,
-    status: null,
-    eaten_at: null,
     incomplete: false,
   };
 });

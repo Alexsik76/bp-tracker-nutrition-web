@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, watch } from 'vue';
 import ModalSheet from '../ModalSheet.vue';
 import type { MenuItemRead } from '../../types/nutrition';
 
@@ -32,8 +32,6 @@ const portionG = ref<number | null>(null);
 const portionText = ref('');
 const kcalEst = ref<number | null>(null);
 
-const isEaten = computed(() => props.item?.status === 'eaten');
-
 watch(
   () => props.show,
   (isOpen) => {
@@ -47,7 +45,7 @@ watch(
 );
 
 function handleSubmit() {
-  if (!props.item || isEaten.value) return;
+  if (!props.item) return;
 
   let kcalPayload: number | null | undefined = undefined;
   if (kcalEst.value !== null && kcalEst.value !== undefined && kcalEst.value !== ('' as unknown as number)) {
@@ -82,7 +80,6 @@ function handleSubmit() {
           type="text"
           class="form-input"
           placeholder="Назва"
-          :disabled="isEaten"
           required
         />
       </div>
@@ -96,7 +93,6 @@ function handleSubmit() {
             type="number"
             class="form-input num-mono"
             placeholder="г"
-            :disabled="isEaten"
           />
         </div>
 
@@ -108,7 +104,6 @@ function handleSubmit() {
             type="text"
             class="form-input"
             placeholder="1 шт..."
-            :disabled="isEaten"
           />
         </div>
       </div>
@@ -126,7 +121,6 @@ function handleSubmit() {
           type="number"
           class="form-input num-mono"
           :placeholder="item?.kcal_source === 'model' ? 'Залиште порожнім для переоцінки' : 'ккал'"
-          :disabled="isEaten"
         />
       </div>
 
@@ -134,8 +128,7 @@ function handleSubmit() {
         <button
           type="submit"
           class="btn btn-primary btn-full"
-          :disabled="saving || isEaten"
-          :title="isEaten ? 'Спочатку зніміть позначку «з\'їдено»' : undefined"
+          :disabled="saving"
         >
           {{ saving ? 'Збереження...' : 'Зберегти зміни' }}
         </button>
@@ -143,9 +136,7 @@ function handleSubmit() {
           v-if="item && canReplace"
           type="button"
           class="btn btn-secondary btn-full"
-          :disabled="isEaten"
-          :title="isEaten ? 'Спочатку зніміть позначку «з\'їдено»' : undefined"
-          @click="!isEaten && emit('replace', item)"
+          @click="emit('replace', item)"
         >
           Замінити позицію...
         </button>
@@ -153,9 +144,7 @@ function handleSubmit() {
           v-if="item"
           type="button"
           class="btn btn-danger btn-full"
-          :disabled="isEaten"
-          :title="isEaten ? 'Спочатку зніміть позначку «з\'їдено»' : undefined"
-          @click="!isEaten && emit('delete', item)"
+          @click="emit('delete', item)"
         >
           Видалити позицію
         </button>
