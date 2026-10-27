@@ -84,8 +84,7 @@ export interface DishUpdate {
 }
 
 export type MenuItemOrigin = 'generated' | 'manual';
-export type MenuItemStatus = 'eaten' | 'skipped';
-export type MenuStatus = 'planned' | 'incomplete' | 'partial' | 'eaten' | 'skipped';
+export type MenuStatus = 'planned' | 'incomplete' | 'eaten';
 
 export interface MenuItemRead {
   id: string;
@@ -99,8 +98,6 @@ export interface MenuItemRead {
   kcal_source: 'user' | 'model' | null;
   origin: MenuItemOrigin;
   position: number;
-  status: MenuItemStatus | null;
-  eaten_at: string | null;
   incomplete: boolean;
 }
 
@@ -122,8 +119,6 @@ export interface MenuItemUpdate {
   portion_text?: string | null;
   kcal_est?: number | null;
   position?: number;
-  status?: MenuItemStatus | null;
-  eaten_at?: string | null;
 }
 
 export interface MenuRead {
@@ -148,8 +143,7 @@ export interface MealCreate {
 }
 
 export interface MenuUpdate {
-  status?: MenuStatus;
-  eaten_at?: string | null;
+  eaten_at: string | null;
 }
 
 export interface GenerationRequest {

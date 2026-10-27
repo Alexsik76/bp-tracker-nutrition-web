@@ -205,8 +205,6 @@ let mockMenus: MenuRead[] = [
         kcal_source: 'model',
         origin: 'generated',
         position: 0,
-        status: 'eaten',
-        eaten_at: new Date().toISOString(),
         incomplete: false,
       },
       {
@@ -221,8 +219,6 @@ let mockMenus: MenuRead[] = [
         kcal_source: 'model',
         origin: 'generated',
         position: 1,
-        status: 'eaten',
-        eaten_at: new Date().toISOString(),
         incomplete: false,
       },
     ],
@@ -253,8 +249,6 @@ let mockMenus: MenuRead[] = [
         kcal_source: 'model',
         origin: 'generated',
         position: 0,
-        status: null,
-        eaten_at: null,
         incomplete: false,
       },
       {
@@ -269,8 +263,6 @@ let mockMenus: MenuRead[] = [
         kcal_source: 'user',
         origin: 'manual',
         position: 1,
-        status: null,
-        eaten_at: null,
         incomplete: false,
       },
     ],
@@ -301,8 +293,6 @@ let mockMenus: MenuRead[] = [
         kcal_source: 'model',
         origin: 'generated',
         position: 0,
-        status: null,
-        eaten_at: null,
         incomplete: false,
       },
     ],
@@ -316,38 +306,17 @@ let mockNotes: MenuNoteRead[] = [];
 
 function deriveMenuState(menu: MenuRead): void {
   const items = menu.items || [];
-  if (items.length === 0) {
-    menu.status = 'planned';
-    menu.eaten_at = null;
-    menu.kcal_incomplete = false;
-    return;
-  }
+  menu.kcal_incomplete = items.some(
+    (i) => i.kcal_est === null || i.kcal_est === undefined
+  );
 
-  const eaten = items.filter((i) => i.status === 'eaten');
-  const skipped = items.filter((i) => i.status === 'skipped');
-  const marked = items.filter((i) => i.status !== null);
-
-  if (eaten.length === items.length) {
+  if (menu.eaten_at) {
     menu.status = 'eaten';
-  } else if (skipped.length === items.length) {
-    menu.status = 'skipped';
-  } else if (marked.length > 0) {
-    menu.status = 'partial';
   } else if (items.some((i) => i.incomplete)) {
     menu.status = 'incomplete';
   } else {
     menu.status = 'planned';
   }
-
-  const eatenAts = items
-    .map((i) => i.eaten_at)
-    .filter((t): t is string => Boolean(t))
-    .sort();
-  menu.eaten_at = eatenAts.length > 0 ? eatenAts[eatenAts.length - 1] : null;
-
-  menu.kcal_incomplete = items.some(
-    (i) => i.status !== 'skipped' && (i.kcal_est === null || i.kcal_est === undefined)
-  );
 }
 
 function computeCanGenerateDay(menus: MenuRead[]): boolean {
@@ -355,15 +324,14 @@ function computeCanGenerateDay(menus: MenuRead[]): boolean {
   return menus.some((m) => {
     if (m.status === 'eaten') return false;
     if (m.pinned) return false;
-    if (m.items.length === 0) return true;
-    return m.items.some((i) => i.status !== 'eaten' && i.status !== 'skipped');
+    return true;
   });
 }
 
 function computeDayGenerationReplacesManual(menus: MenuRead[]): boolean {
   return menus.some((m) =>
     m.status !== 'eaten' &&
-    m.items.some((i) => i.origin === 'manual' && i.status !== 'eaten' && i.status !== 'skipped')
+    m.items.some((i) => i.origin === 'manual')
   );
 }
 
@@ -502,8 +470,6 @@ export const mockNutritionApi = {
           kcal_source: pi.kcal_est ? 'user' : null,
           origin: 'manual',
           position: pi.position,
-          status: null,
-          eaten_at: null,
           incomplete: false,
         })) : [];
 
@@ -577,21 +543,7 @@ export const mockNutritionApi = {
     if (!menu) {
       throw new ApiError('Menu not found', 404);
     }
-    if (data.status === 'skipped') {
-      throw new ApiError('Whole-meal skip is not supported', 400);
-    }
-    const timestamp = data.eaten_at || new Date().toISOString();
-    if (data.status === 'planned') {
-      for (const item of menu.items) {
-        item.status = null;
-        item.eaten_at = null;
-      }
-    } else if (data.status === 'eaten') {
-      for (const item of menu.items) {
-        item.status = 'eaten';
-        item.eaten_at = timestamp;
-      }
-    }
+    menu.eaten_at = data.eaten_at ?? null;
     deriveMenuState(menu);
     return JSON.parse(JSON.stringify(menu));
   },
@@ -634,12 +586,9 @@ export const mockNutritionApi = {
       (m) => (m.date === menuDate || !m.date) && m.slot.toLowerCase() === slotLower
     );
 
-    if (
-      existing &&
-      (existing.status === 'eaten' || existing.items.some((i) => i.status === 'eaten'))
-    ) {
-      throw new ApiError('Не можна видалити прийом, що містить зʼїдені позиції (спочатку зніміть позначку «з\'їдено»)', 409, {
-        detail: 'Не можна видалити прийом, що містить зʼїдені позиції (спочатку зніміть позначку «з\'їдено»)',
+    if (existing && existing.status === 'eaten') {
+      throw new ApiError('Не можна видалити зʼїдений прийом (спочатку зніміть позначку «з\'їдено»)', 409, {
+        detail: 'Не можна видалити зʼїдений прийом (спочатку зніміть позначку «з\'їдено»)',
       });
     }
 
@@ -690,12 +639,8 @@ export const mockNutritionApi = {
       const slotName = data.slot;
       let slotMenu: MenuRead;
       const existing = mockMenus.find((m) => m.slot.toLowerCase() === slotName.toLowerCase());
-      if (
-        existing &&
-        (existing.status === 'eaten' ||
-          (existing.items.length > 0 && existing.items.every((i) => i.status === 'eaten' || i.status === 'skipped')))
-      ) {
-        throw new ApiError(`Прийом «${slotName}» вже повністю завершено або пропущено`, 409);
+      if (existing && existing.status === 'eaten') {
+        throw new ApiError(`Прийом «${slotName}» вже зʼїдено (спочатку зніміть позначку «з\'їдено»)`, 409);
       }
 
       // Simulate two-stage server processing
@@ -725,8 +670,6 @@ export const mockNutritionApi = {
               kcal_source: 'model',
               origin: 'generated',
               position: 0,
-              status: null,
-              eaten_at: null,
               incomplete: false,
             },
             {
@@ -741,8 +684,6 @@ export const mockNutritionApi = {
               kcal_source: 'model',
               origin: 'generated',
               position: 1,
-              status: null,
-              eaten_at: null,
               incomplete: false,
             },
           ],
@@ -756,7 +697,6 @@ export const mockNutritionApi = {
           slotMenu.id = `menu-${Date.now()}`;
         }
         slotMenu.regenerations += 1;
-        const markedItems = slotMenu.items.filter((i) => i.status !== null);
         const newItems: MenuItemRead[] = [
           {
             id: `item-${Date.now()}-1`,
@@ -770,8 +710,6 @@ export const mockNutritionApi = {
             kcal_source: 'model',
             origin: 'generated',
             position: 0,
-            status: null,
-            eaten_at: null,
             incomplete: false,
           },
           {
@@ -786,12 +724,10 @@ export const mockNutritionApi = {
             kcal_source: 'model',
             origin: 'generated',
             position: 1,
-            status: null,
-            eaten_at: null,
             incomplete: false,
           },
         ];
-        slotMenu.items = [...markedItems, ...newItems];
+        slotMenu.items = newItems;
       }
       deriveMenuState(slotMenu);
 
@@ -805,7 +741,7 @@ export const mockNutritionApi = {
 
     const canGen = computeCanGenerateDay(mockMenus);
     if (!canGen) {
-      throw new ApiError('Усі позиції дня з\'їдено, пропущено або закріплено', 409);
+      throw new ApiError('Усі прийоми дня з\'їдено або закріплено', 409);
     }
 
     // Simulate two-stage server processing
@@ -815,11 +751,7 @@ export const mockNutritionApi = {
       if (!m.id) {
         m.id = `menu-${Date.now()}-${m.slot}`;
       }
-      if (m.pinned) {
-        continue;
-      }
-      const markedItems = m.items.filter((i) => i.status !== null);
-      if (markedItems.length === m.items.length && m.items.length > 0) {
+      if (m.pinned || m.status === 'eaten') {
         continue;
       }
       m.regenerations += 1;
@@ -836,12 +768,10 @@ export const mockNutritionApi = {
           kcal_source: 'model',
           origin: 'generated',
           position: 0,
-          status: null,
-          eaten_at: null,
           incomplete: false,
         },
       ];
-      m.items = [...markedItems, ...newItems];
+      m.items = newItems;
       deriveMenuState(m);
     }
 
@@ -857,7 +787,7 @@ export const mockNutritionApi = {
     const targets = slot ? mockMenus.filter((m) => m.slot === slot) : mockMenus;
     for (const m of targets) {
       for (const it of m.items) {
-        if (it.status !== 'skipped' && (it.kcal_est === null || it.kcal_est === undefined)) {
+        if (it.kcal_est === null || it.kcal_est === undefined) {
           it.kcal_est = it.portion_g ? Math.round(it.portion_g * 1.5) : 200;
           it.kcal_source = 'model';
         }
@@ -871,8 +801,8 @@ export const mockNutritionApi = {
     const hasKcal = data.kcal_est !== undefined && data.kcal_est !== null;
     let target = mockMenus.find((m) => (m.date === _menuDate || !m.date) && m.slot === slot);
     if (target && target.status === 'eaten') {
-      throw new ApiError('Не можна додати позицію до завершеного прийому', 409, {
-        detail: 'Не можна додати позицію до завершеного прийому',
+      throw new ApiError('Не можна додати позицію до завершеного прийому (спочатку зніміть позначку «з\'їдено»)', 409, {
+        detail: 'Не можна додати позицію до завершеного прийому (спочатку зніміть позначку «з\'їдено»)',
       });
     }
     if (!target) {
@@ -907,8 +837,6 @@ export const mockNutritionApi = {
       kcal_source: hasKcal ? 'user' : null,
       origin: 'manual',
       position: 99,
-      status: null,
-      eaten_at: null,
       incomplete: false,
     };
     target.items.push(newItem);
@@ -920,30 +848,10 @@ export const mockNutritionApi = {
     for (const m of mockMenus) {
       const it = m.items.find((i) => i.id === itemId);
       if (it) {
-        if (it.status === 'eaten') {
-          const isEditOrReplace =
-            data.dish_id !== undefined ||
-            data.product_id !== undefined ||
-            data.title !== undefined ||
-            data.portion_g !== undefined ||
-            data.portion_text !== undefined ||
-            data.kcal_est !== undefined ||
-            data.position !== undefined;
-          if (isEditOrReplace) {
-            throw new ApiError('Зʼїдену позицію не можна редагувати або замінити (спочатку зніміть позначку «з\'їдено»)', 409, {
-              detail: 'Зʼїдену позицію не можна редагувати або замінити (спочатку зніміть позначку «з\'їдено»)',
-            });
-          }
-        }
-        if (data.status !== undefined) {
-          it.status = data.status;
-          if (data.status === 'eaten') {
-            it.eaten_at = data.eaten_at !== undefined ? data.eaten_at : new Date().toISOString();
-          } else {
-            it.eaten_at = null;
-          }
-        } else if (data.eaten_at !== undefined) {
-          it.eaten_at = data.eaten_at;
+        if (m.status === 'eaten') {
+          throw new ApiError('Зʼїдений прийом їжі не можна редагувати (спочатку зніміть позначку «з\'їдено»)', 409, {
+            detail: 'Зʼїдений прийом їжі не можна редагувати (спочатку зніміть позначку «з\'їдено»)',
+          });
         }
         const prevRef = `${it.dish_id}:${it.product_id}`;
         if (data.dish_id !== undefined) {
@@ -999,9 +907,9 @@ export const mockNutritionApi = {
     for (const m of mockMenus) {
       const it = m.items.find((i) => i.id === itemId);
       if (it) {
-        if (it.status === 'eaten') {
-          throw new ApiError('Зʼїдену позицію не можна видалити (спочатку зніміть позначку «з\'їдено»)', 409, {
-            detail: 'Зʼїдену позицію не можна видалити (спочатку зніміть позначку «з\'їдено»)',
+        if (m.status === 'eaten') {
+          throw new ApiError('Зʼїдений прийом їжі не можна змінювати (спочатку зніміть позначку «з\'їдено»)', 409, {
+            detail: 'Зʼїдений прийом їжі не можна змінювати (спочатку зніміть позначку «з\'їдено»)',
           });
         }
         const prevLen = m.items.length;
@@ -1065,6 +973,12 @@ export const mockNutritionApi = {
       (m) => (m.date === menuDate || !m.date) && m.slot.toLowerCase() === slotLower
     );
 
+    if (menu && menu.status === 'eaten') {
+      throw new ApiError('Зʼїдений прийом їжі не можна змінювати (спочатку зніміть позначку «з\'їдено»)', 409, {
+        detail: 'Зʼїдений прийом їжі не можна змінювати (спочатку зніміть позначку «з\'їдено»)',
+      });
+    }
+
     const pmSchedule = mockProfile.meals.find((p) => p.name.toLowerCase() === slotLower);
     const time = menu?.time || pmSchedule?.time || null;
 
@@ -1080,22 +994,12 @@ export const mockNutritionApi = {
       kcal_source: pi.kcal_est ? 'user' : null,
       origin: 'manual',
       position: pi.position,
-      status: null,
-      eaten_at: null,
       incomplete: false,
     }));
 
     if (menu) {
       menu.pinned = true;
-      const eatenItems = menu.items.filter((i) => i.status === 'eaten');
-      let pos = 0;
-      for (const ei of eatenItems) {
-        ei.position = pos++;
-      }
-      for (const pi of pinnedItems) {
-        pi.position = pos++;
-      }
-      menu.items = [...eatenItems, ...pinnedItems];
+      menu.items = [...pinnedItems];
       deriveMenuState(menu);
     } else {
       menu = {

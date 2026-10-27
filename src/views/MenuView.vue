@@ -35,7 +35,6 @@ const {
   notesSupported,
   savedNotes,
   sendingNote,
-  updatingItemId,
   totalKcal,
   eatenKcal,
   dayKcalIncomplete,
@@ -49,14 +48,10 @@ const {
   handleGenerateDay,
   handleGenerateSlot,
   handleEstimateSlot,
-  updateSlotStatus,
-  promptCancelMeal,
+  handleToggleMealEaten,
   handleDeleteMeal,
   handlePinMeal,
   handleCreateMeal,
-  handleMarkItemEaten,
-  handleMarkItemSkipped,
-  handleUnmarkItem,
   handleDeleteItem,
   handleAddMenuItem,
   handleUpdateItemPortion,
@@ -141,19 +136,22 @@ async function handleSaveNewItem(payload: {
 }
 
 function openEditItemModal(item: MenuItemRead) {
-  if (item.status === 'eaten') return;
+  const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === item.id));
+  if (parentMenu?.status === 'eaten') return;
   editingItem.value = item;
   isEditItemModalOpen.value = true;
 }
 
 function openReplaceFromEdit(item: MenuItemRead) {
-  if (item.status === 'eaten') return;
+  const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === item.id));
+  if (parentMenu?.status === 'eaten') return;
   isEditItemModalOpen.value = false;
   openReplaceItemModal(item);
 }
 
 async function handleDeleteItemFromEdit(item: MenuItemRead) {
-  if (item.status === 'eaten') return;
+  const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === item.id));
+  if (parentMenu?.status === 'eaten') return;
   isEditItemModalOpen.value = false;
   await handleDeleteItem(item);
 }
@@ -164,7 +162,7 @@ async function handleSaveItemEdit(payload: {
   portionText?: string | null;
   kcalEst?: number | null;
 }) {
-  if (!editingItem.value || editingItem.value.status === 'eaten') return;
+  if (!editingItem.value) return;
 
   savingEditItem.value = true;
   try {
@@ -176,7 +174,8 @@ async function handleSaveItemEdit(payload: {
 }
 
 async function openReplaceItemModal(item: MenuItemRead) {
-  if (item.status === 'eaten') return;
+  const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === item.id));
+  if (parentMenu?.status === 'eaten') return;
   replacingItem.value = item;
   isReplaceModalOpen.value = true;
   await loadInventory();
@@ -189,7 +188,7 @@ async function handleSaveReplaceItem(payload: {
   portionText?: string | null;
   kcalEst?: number | null;
 }) {
-  if (!replacingItem.value || replacingItem.value.status === 'eaten') return;
+  if (!replacingItem.value) return;
 
   savingReplaceItem.value = true;
   try {
@@ -316,18 +315,13 @@ onMounted(() => {
         :generating="generating"
         :generating-slot="generatingSlot"
         :generation-stage-text="generationStageText"
-        :updating-item-id="updatingItemId"
         :estimating-slot="estimatingSlot"
         :has-available-pin="availablePins.some(p => p.slot.toLowerCase() === menu.slot.toLowerCase())"
-        @prompt-cancel="promptCancelMeal"
-        @update-status="({ menu: m, status }) => updateSlotStatus(m, status)"
+        @toggle-eaten="handleToggleMealEaten"
         @add-item="openAddItemModal"
         @generate-slot="handleGenerateSlot"
         @estimate-slot="handleEstimateSlot"
         @edit-item="openEditItemModal"
-        @mark-item-eaten="handleMarkItemEaten"
-        @mark-item-skipped="handleMarkItemSkipped"
-        @unmark-item="handleUnmarkItem"
         @delete-meal="handleDeleteMeal"
         @restore-pin="handlePinMeal"
       />
@@ -417,7 +411,6 @@ onMounted(() => {
       :show="isEditItemModalOpen"
       :item="editingItem"
       :saving="savingEditItem"
-      :can-replace="editingItem?.status !== 'eaten'"
       @close="isEditItemModalOpen = false"
       @save="handleSaveItemEdit"
       @replace="openReplaceFromEdit"

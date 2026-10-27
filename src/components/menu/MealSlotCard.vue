@@ -2,28 +2,23 @@
 import { computed } from 'vue';
 import MenuItemRow from './MenuItemRow.vue';
 import { formatTime24 } from '../../utils/date';
-import type { MenuRead, MenuItemRead, MenuStatus } from '../../types/nutrition';
+import type { MenuRead, MenuItemRead } from '../../types/nutrition';
 
 const props = defineProps<{
   menu: MenuRead;
   generating?: boolean;
   generatingSlot?: string | null;
   generationStageText?: string;
-  updatingItemId?: string | null;
   estimatingSlot?: string | null;
   hasAvailablePin?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'prompt-cancel', menu: MenuRead): void;
-  (e: 'update-status', payload: { menu: MenuRead; status: MenuStatus }): void;
+  (e: 'toggle-eaten', menu: MenuRead): void;
   (e: 'add-item', slot: string): void;
   (e: 'generate-slot', slot: string): void;
   (e: 'estimate-slot', slot: string): void;
   (e: 'edit-item', item: MenuItemRead): void;
-  (e: 'mark-item-eaten', item: MenuItemRead): void;
-  (e: 'mark-item-skipped', item: MenuItemRead): void;
-  (e: 'unmark-item', item: MenuItemRead): void;
   (e: 'delete-meal', menu: MenuRead): void;
   (e: 'restore-pin', slot: string): void;
 }>();
@@ -32,16 +27,7 @@ function getSlotKcal(menu: MenuRead): number {
   return menu.items.reduce((sum, item) => sum + (item.kcal_est || 0), 0);
 }
 
-const hasEatenItems = computed(() =>
-  props.menu.status === 'eaten' || props.menu.items.some((item) => item.status === 'eaten')
-);
-
 const deleteMealTooltip = computed(() => {
-  if (hasEatenItems.value) {
-    return props.menu.pinned
-      ? 'Не можна зняти закріплення: у прийомі є зʼїдені позиції (спочатку зніміть позначку «з\'їдено»)'
-      : 'Не можна видалити прийом: у ньому є зʼїдені позиції (спочатку зніміть позначку «з\'їдено»)';
-  }
   return props.menu.pinned
     ? `Зняти закріплення з «${props.menu.slot}» на цей день`
     : `Видалити «${props.menu.slot}»`;
@@ -54,8 +40,6 @@ const deleteMealTooltip = computed(() => {
     :class="{
       'slot-incomplete': menu.status === 'incomplete',
       'slot-eaten': menu.status === 'eaten',
-      'slot-skipped': menu.status === 'skipped',
-      'slot-partial': menu.status === 'partial',
     }"
   >
     <!-- Slot Header -->
@@ -86,7 +70,7 @@ const deleteMealTooltip = computed(() => {
         <span v-if="menu.kcal_incomplete" class="slot-kcal slot-kcal-uncalc">не розраховано</span>
         <span v-else class="slot-kcal num-mono">{{ getSlotKcal(menu) }} ккал</span>
         <button
-          v-if="menu.kcal_incomplete"
+          v-if="menu.kcal_incomplete && menu.status !== 'eaten'"
           type="button"
           class="btn-estimate"
           :disabled="Boolean(estimatingSlot)"
@@ -99,30 +83,9 @@ const deleteMealTooltip = computed(() => {
       </div>
 
       <div class="slot-status-group">
-        <template v-if="menu.status === 'eaten' || menu.status === 'partial' || menu.status === 'skipped'">
-          <span v-if="menu.status === 'eaten'" class="badge badge-success">
-            ✓ З'їдено
-          </span>
-          <span v-else-if="menu.status === 'partial'" class="badge badge-primary">
-            Частково
-          </span>
-          <span v-else class="badge badge-neutral">
-            Пропущено
-          </span>
-          <button
-            v-if="menu.id"
-            type="button"
-            class="btn-icon status-edit-btn"
-            :title="menu.status === 'eaten' ? 'Скасувати статус «З\'їдено»' : (menu.status === 'partial' ? 'Скасувати позначки для всього прийому' : 'Скасувати статус «Пропущено»')"
-            :aria-label="menu.status === 'eaten' ? 'Скасувати статус «З\'їдено»' : (menu.status === 'partial' ? 'Скасувати позначки для всього прийому' : 'Скасувати статус «Пропущено»')"
-            @click="emit('prompt-cancel', menu)"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 20h9"></path>
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-            </svg>
-          </button>
-        </template>
+        <span v-if="menu.status === 'eaten'" class="badge badge-success">
+          ✓ З'їдено
+        </span>
         <span v-else-if="menu.status === 'incomplete'" class="badge badge-warning">
           Не вистачає продуктів
         </span>
@@ -131,12 +94,12 @@ const deleteMealTooltip = computed(() => {
         </span>
 
         <button
+          v-if="menu.status !== 'eaten'"
           type="button"
           class="btn-icon delete-slot-btn"
-          :disabled="hasEatenItems"
           :title="deleteMealTooltip"
           :aria-label="deleteMealTooltip"
-          @click="!hasEatenItems && emit('delete-meal', menu)"
+          @click="emit('delete-meal', menu)"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -153,11 +116,7 @@ const deleteMealTooltip = computed(() => {
         :key="item.id"
         :item="item"
         :can-edit="menu.status !== 'eaten'"
-        :updating="updatingItemId === item.id"
         @edit="emit('edit-item', item)"
-        @mark-eaten="emit('mark-item-eaten', item)"
-        @mark-skipped="emit('mark-item-skipped', item)"
-        @unmark="emit('unmark-item', item)"
       />
     </div>
 
@@ -199,31 +158,24 @@ const deleteMealTooltip = computed(() => {
           </svg>
         </button>
 
-        <!-- Cancel whole meal button (when partial or eaten) -->
+        <!-- Eaten / Cancel button -->
         <button
-          v-if="menu.id && (menu.status === 'eaten' || menu.status === 'partial') && generatingSlot !== menu.slot"
+          v-if="menu.id && menu.status === 'eaten' && generatingSlot !== menu.slot"
           type="button"
-          class="btn-icon slot-ctrl-btn"
+          class="btn btn-secondary btn-sm-action"
           :disabled="generating"
-          @click="emit('prompt-cancel', menu)"
-          title="Скасувати позначки для всього прийому"
-          aria-label="Скасувати позначки для всього прийому"
+          @click="emit('toggle-eaten', menu)"
         >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
+          Скасувати
         </button>
-
-        <!-- Whole meal eaten button -->
         <button
-          v-if="menu.id && menu.items.length > 0 && menu.status !== 'eaten' && generatingSlot !== menu.slot"
+          v-else-if="menu.id && menu.items.length > 0 && menu.status !== 'eaten' && generatingSlot !== menu.slot"
           type="button"
           class="btn btn-primary btn-sm-action"
           :disabled="generating"
-          @click="emit('update-status', { menu, status: 'eaten' })"
+          @click="emit('toggle-eaten', menu)"
         >
-          ✓ З'їдено
+          З'їдено
         </button>
       </div>
     </div>
@@ -246,14 +198,6 @@ const deleteMealTooltip = computed(() => {
 
 .slot-eaten {
   border-color: rgba(34, 197, 94, 0.25);
-}
-
-.slot-skipped {
-  opacity: 0.65;
-}
-
-.slot-partial {
-  border-color: rgba(129, 140, 248, 0.35);
 }
 
 .slot-header {
@@ -364,19 +308,6 @@ const deleteMealTooltip = computed(() => {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-}
-
-.status-edit-btn {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-  color: var(--text-muted);
-  border-radius: var(--radius-pill);
-}
-
-.status-edit-btn:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .delete-slot-btn {
