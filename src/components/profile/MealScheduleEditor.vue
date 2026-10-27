@@ -1,15 +1,29 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useToastStore } from '../../stores/toast';
 import { normalizeTime24 } from '../../utils/date';
-import type { MealSchedule } from '../../types/nutrition';
+import { MEAL_TYPES } from '../../utils/mealTypes';
+import type { MealSchedule, MealType } from '../../types/nutrition';
 
 const meals = defineModel<MealSchedule[]>({ required: true });
 
 const toastStore = useToastStore();
 
+const usedTypes = computed(() => new Set(meals.value.map((m) => m.type)));
+const canAdd = computed(() => usedTypes.value.size < MEAL_TYPES.length);
+
+function isTypeTaken(type: MealType, own: MealType): boolean {
+  return type !== own && usedTypes.value.has(type);
+}
+
 function addMeal() {
+  const free = MEAL_TYPES.find((m) => !usedTypes.value.has(m.value));
+  if (!free) {
+    toastStore.show('Усі типи прийомів уже є в розкладі', 'warning');
+    return;
+  }
   meals.value.push({
-    name: 'Перекус',
+    type: free.value,
     time: '16:00',
   });
 }
@@ -27,7 +41,12 @@ function removeMeal(index: number) {
   <div class="card">
     <div class="section-header">
       <span>Розклад прийомів їжі</span>
-      <button type="button" class="btn-text-action" @click="addMeal">
+      <button
+        type="button"
+        class="btn-text-action"
+        :disabled="!canAdd"
+        @click="addMeal"
+      >
         + Додати прийом
       </button>
     </div>
@@ -38,13 +57,21 @@ function removeMeal(index: number) {
         :key="idx"
         class="meal-row"
       >
-        <input
-          v-model="meal.name"
-          type="text"
-          class="form-input meal-name-input"
-          placeholder="Назва прийому"
+        <select
+          v-model="meal.type"
+          class="form-select meal-name-input"
+          aria-label="Тип прийому"
           required
-        />
+        >
+          <option
+            v-for="mt in MEAL_TYPES"
+            :key="mt.value"
+            :value="mt.value"
+            :disabled="isTypeTaken(mt.value, meal.type)"
+          >
+            {{ mt.label }}
+          </option>
+        </select>
         <input
           v-model="meal.time"
           type="text"

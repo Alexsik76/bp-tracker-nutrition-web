@@ -3,34 +3,41 @@ import { ref, computed, watch } from 'vue';
 import ModalSheet from '../ModalSheet.vue';
 import { useToastStore } from '../../stores/toast';
 import { normalizeTime24, isValidTime24 } from '../../utils/date';
-import type { MealSchedule } from '../../types/nutrition';
+import { MEAL_TYPES, mealTypeLabel } from '../../utils/mealTypes';
+import type { MealSchedule, MealType } from '../../types/nutrition';
 
 const props = defineProps<{
   show: boolean;
   saving: boolean;
   scheduleMeals: MealSchedule[];
-  existingSlots: string[];
+  existingSlots: MealType[];
 }>();
 
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'save', payload: { slot: string; time: string }): void;
+  (e: 'save', payload: { meal_type: MealType; time: string }): void;
 }>();
 
 const toastStore = useToastStore();
 
-const slotName = ref('');
+const slotType = ref<MealType | ''>('');
 const slotTime = ref('');
 
-// Filter profile schedule meals that are not currently on the canvas
-const missingScheduleMeals = computed(() => {
-  const existingSet = new Set(props.existingSlots.map((s) => s.trim().toLowerCase()));
-  return props.scheduleMeals.filter((sm) => !existingSet.has(sm.name.trim().toLowerCase()));
-});
+const existingSet = computed(() => new Set(props.existingSlots));
+
+// Profile schedule meals that are not currently on the canvas
+const missingScheduleMeals = computed(() =>
+  props.scheduleMeals.filter((sm) => !existingSet.value.has(sm.type))
+);
 
 function selectScheduleMeal(sm: MealSchedule) {
-  slotName.value = sm.name;
+  slotType.value = sm.type;
   slotTime.value = sm.time;
+}
+
+function handleTypeChange() {
+  const sm = props.scheduleMeals.find((m) => m.type === slotType.value);
+  if (sm) slotTime.value = sm.time;
 }
 
 watch(
@@ -39,10 +46,11 @@ watch(
     if (isOpen) {
       if (missingScheduleMeals.value.length > 0) {
         const first = missingScheduleMeals.value[0];
-        slotName.value = first.name;
+        slotType.value = first.type;
         slotTime.value = first.time;
       } else {
-        slotName.value = '';
+        const free = MEAL_TYPES.find((m) => !existingSet.value.has(m.value));
+        slotType.value = free?.value ?? '';
         slotTime.value = '';
       }
     }
@@ -56,9 +64,9 @@ function handleTimeBlur() {
 }
 
 function handleSubmit() {
-  const name = slotName.value.trim();
-  if (!name) {
-    toastStore.show('Вкажіть назву прийому їжі', 'warning');
+  const type = slotType.value;
+  if (!type) {
+    toastStore.show('Оберіть тип прийому їжі', 'warning');
     return;
   }
 
@@ -69,7 +77,7 @@ function handleSubmit() {
   }
 
   emit('save', {
-    slot: name,
+    meal_type: type,
     time: normalizedTime,
   });
 }
@@ -87,29 +95,37 @@ function handleSubmit() {
         <div class="schedule-chips-list">
           <button
             v-for="sm in missingScheduleMeals"
-            :key="sm.name"
+            :key="sm.type"
             type="button"
             class="schedule-chip"
-            :class="{ active: slotName === sm.name }"
+            :class="{ active: slotType === sm.type }"
             @click="selectScheduleMeal(sm)"
           >
-            <span class="chip-name">{{ sm.name }}</span>
+            <span class="chip-name">{{ mealTypeLabel(sm.type) }}</span>
             <span class="chip-time num-mono">{{ sm.time }}</span>
           </button>
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="addMealSlotName">Назва прийому</label>
-        <input
-          id="addMealSlotName"
-          v-model="slotName"
-          type="text"
-          class="form-input"
-          placeholder="Наприклад, Другий сніданок"
+        <label class="form-label" for="addMealSlotType">Тип прийому</label>
+        <select
+          id="addMealSlotType"
+          v-model="slotType"
+          class="form-select"
           required
-          autofocus
-        />
+          @change="handleTypeChange"
+        >
+          <option value="" disabled>Оберіть тип</option>
+          <option
+            v-for="mt in MEAL_TYPES"
+            :key="mt.value"
+            :value="mt.value"
+            :disabled="existingSet.has(mt.value)"
+          >
+            {{ mt.label }}
+          </option>
+        </select>
       </div>
 
       <div class="form-group">
@@ -131,7 +147,7 @@ function handleSubmit() {
         <button
           type="submit"
           class="btn btn-primary btn-full"
-          :disabled="saving"
+          :disabled="saving || !slotType"
         >
           {{ saving ? 'Додавання...' : 'Додати прийом' }}
         </button>

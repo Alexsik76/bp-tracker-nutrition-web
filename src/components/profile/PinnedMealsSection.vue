@@ -12,7 +12,9 @@ import type {
   PinnedMealItemRead,
   PinnedMealItemUpsert,
   MenuItemRead,
+  MealType,
 } from '../../types/nutrition';
+import { mealTypeLabel } from '../../utils/mealTypes';
 
 const props = defineProps<{
   scheduleMeals: MealSchedule[];
@@ -27,16 +29,16 @@ const {
 
 const pinnedMeals = ref<PinnedMealRead[]>([]);
 const loading = ref(true);
-const savingSlot = ref<string | null>(null);
+const savingSlot = ref<MealType | null>(null);
 
 // Add item modal sheet state
 const isAddModalOpen = ref(false);
-const activeSlotForAdd = ref<string | null>(null);
+const activeSlotForAdd = ref<MealType | null>(null);
 const addingItem = ref(false);
 
 // Edit item modal sheet state
 const isEditModalOpen = ref(false);
-const activeSlotForEdit = ref<string | null>(null);
+const activeSlotForEdit = ref<MealType | null>(null);
 const editingPinItem = ref<PinnedMealItemRead | null>(null);
 const savingEditItem = ref(false);
 
@@ -59,9 +61,9 @@ const editingItemProxy = computed<MenuItemRead | null>(() => {
   };
 });
 
-function getPinnedMeal(slotName: string): PinnedMealRead | undefined {
+function getPinnedMeal(slotName: MealType): PinnedMealRead | undefined {
   return pinnedMeals.value.find(
-    (p) => p.slot.toLowerCase() === slotName.trim().toLowerCase()
+    (p) => p.meal_type === slotName
   );
 }
 
@@ -81,7 +83,7 @@ async function loadPinned() {
   }
 }
 
-async function openAddItem(slotName: string) {
+async function openAddItem(slotName: MealType) {
   activeSlotForAdd.value = slotName;
   isAddModalOpen.value = true;
   await loadInventory();
@@ -129,7 +131,7 @@ async function handleSaveNewItem(payload: {
 
     // Update in-memory list
     const idx = pinnedMeals.value.findIndex(
-      (p) => p.slot.toLowerCase() === slotName.toLowerCase()
+      (p) => p.meal_type === slotName
     );
     if (idx !== -1) {
       pinnedMeals.value[idx] = updated;
@@ -137,7 +139,7 @@ async function handleSaveNewItem(payload: {
       pinnedMeals.value.push(updated);
     }
 
-    toastStore.show(`Позицію додано до «${slotName}»`, 'success');
+    toastStore.show(`Позицію додано до «${mealTypeLabel(slotName)}»`, 'success');
     isAddModalOpen.value = false;
   } catch (err: unknown) {
     console.error('Error adding pinned item:', err);
@@ -151,7 +153,7 @@ async function handleSaveNewItem(payload: {
   }
 }
 
-function openEditItem(slotName: string, item: PinnedMealItemRead) {
+function openEditItem(slotName: MealType, item: PinnedMealItemRead) {
   activeSlotForEdit.value = slotName;
   editingPinItem.value = item;
   isEditModalOpen.value = true;
@@ -202,7 +204,7 @@ async function handleSaveItemEdit(payload: {
     });
 
     const idx = pinnedMeals.value.findIndex(
-      (p) => p.slot.toLowerCase() === slotName.toLowerCase()
+      (p) => p.meal_type === slotName
     );
     if (idx !== -1) {
       pinnedMeals.value[idx] = updated;
@@ -224,7 +226,7 @@ async function handleDeleteItemFromEdit(item: MenuItemRead) {
   isEditModalOpen.value = false;
 }
 
-async function quickDeleteItem(slotName: string, itemId: string) {
+async function quickDeleteItem(slotName: MealType, itemId: string) {
   const existing = getPinnedMeal(slotName);
   if (!existing) return;
 
@@ -247,7 +249,7 @@ async function quickDeleteItem(slotName: string, itemId: string) {
     });
 
     const idx = pinnedMeals.value.findIndex(
-      (p) => p.slot.toLowerCase() === slotName.toLowerCase()
+      (p) => p.meal_type === slotName
     );
     if (idx !== -1) {
       pinnedMeals.value[idx] = updated;
@@ -260,7 +262,7 @@ async function quickDeleteItem(slotName: string, itemId: string) {
   }
 }
 
-async function toggleActive(slotName: string) {
+async function toggleActive(slotName: MealType) {
   const existing = getPinnedMeal(slotName);
   if (!existing || savingSlot.value === slotName) return;
 
@@ -284,14 +286,14 @@ async function toggleActive(slotName: string) {
     });
 
     const idx = pinnedMeals.value.findIndex(
-      (p) => p.slot.toLowerCase() === slotName.toLowerCase()
+      (p) => p.meal_type === slotName
     );
     if (idx !== -1) {
       pinnedMeals.value[idx] = updated;
     }
 
     toastStore.show(
-      nextActive ? `«${slotName}»: закріплення увімкнено` : `«${slotName}»: закріплення вимкнено`,
+      nextActive ? `«${mealTypeLabel(slotName)}»: закріплення увімкнено` : `«${mealTypeLabel(slotName)}»: закріплення вимкнено`,
       'info'
     );
   } catch (err: unknown) {
@@ -302,8 +304,8 @@ async function toggleActive(slotName: string) {
   }
 }
 
-async function handleDeletePinnedMeal(slotName: string) {
-  if (!confirm(`Видалити закріплений прийом для «${slotName}»?`)) {
+async function handleDeletePinnedMeal(slotName: MealType) {
+  if (!confirm(`Видалити закріплений прийом для «${mealTypeLabel(slotName)}»?`)) {
     return;
   }
 
@@ -311,9 +313,9 @@ async function handleDeletePinnedMeal(slotName: string) {
   try {
     await nutritionApi.deletePinnedMeal(slotName);
     pinnedMeals.value = pinnedMeals.value.filter(
-      (p) => p.slot.toLowerCase() !== slotName.toLowerCase()
+      (p) => p.meal_type !== slotName
     );
-    toastStore.show(`Закріплений прийом «${slotName}» видалено`, 'info');
+    toastStore.show(`Закріплений прийом «${mealTypeLabel(slotName)}» видалено`, 'info');
   } catch (err: unknown) {
     console.error('Error deleting pinned meal:', err);
     toastStore.show(err instanceof Error ? err.message : 'Помилка видалення прийому', 'error');
@@ -346,38 +348,38 @@ onMounted(() => {
     <div v-else class="schedule-meals-list">
       <div
         v-for="sm in scheduleMeals"
-        :key="sm.name"
+        :key="sm.type"
         class="pinned-slot-box"
       >
         <!-- Slot Header -->
         <div class="pinned-slot-header">
           <div class="pinned-slot-title-group">
-            <span class="pinned-slot-name">{{ sm.name }}</span>
+            <span class="pinned-slot-name">{{ mealTypeLabel(sm.type) }}</span>
             <span class="pinned-slot-time num-mono">{{ formatTime24(sm.time) }}</span>
             <span
-              v-if="getPinnedMeal(sm.name)"
+              v-if="getPinnedMeal(sm.type)"
               class="pinned-slot-kcal num-mono"
             >
-              {{ calculateSlotKcal(getPinnedMeal(sm.name)!.items) }} ккал
+              {{ calculateSlotKcal(getPinnedMeal(sm.type)!.items) }} ккал
             </span>
           </div>
 
-          <div v-if="getPinnedMeal(sm.name)" class="pinned-slot-actions">
+          <div v-if="getPinnedMeal(sm.type)" class="pinned-slot-actions">
             <!-- Active Toggle -->
             <label
               class="toggle-control"
-              :class="{ 'is-active': getPinnedMeal(sm.name)!.active }"
-              :title="getPinnedMeal(sm.name)!.active ? 'Закріплення активне' : 'Закріплення вимкнено'"
+              :class="{ 'is-active': getPinnedMeal(sm.type)!.active }"
+              :title="getPinnedMeal(sm.type)!.active ? 'Закріплення активне' : 'Закріплення вимкнено'"
             >
               <input
                 type="checkbox"
                 class="toggle-checkbox"
-                :checked="getPinnedMeal(sm.name)!.active"
-                :disabled="savingSlot === sm.name"
-                @change="toggleActive(sm.name)"
+                :checked="getPinnedMeal(sm.type)!.active"
+                :disabled="savingSlot === sm.type"
+                @change="toggleActive(sm.type)"
               />
               <span class="toggle-text">
-                {{ getPinnedMeal(sm.name)!.active ? 'Активний' : 'Вимкнено' }}
+                {{ getPinnedMeal(sm.type)!.active ? 'Активний' : 'Вимкнено' }}
               </span>
             </label>
 
@@ -385,10 +387,10 @@ onMounted(() => {
             <button
               type="button"
               class="btn-icon delete-pin-btn"
-              :title="`Видалити закріплений прийом «${sm.name}»`"
-              :aria-label="`Видалити закріплений прийом «${sm.name}»`"
-              :disabled="savingSlot === sm.name"
-              @click="handleDeletePinnedMeal(sm.name)"
+              :title="`Видалити закріплений прийом «${mealTypeLabel(sm.type)}»`"
+              :aria-label="`Видалити закріплений прийом «${mealTypeLabel(sm.type)}»`"
+              :disabled="savingSlot === sm.type"
+              @click="handleDeletePinnedMeal(sm.type)"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -399,9 +401,9 @@ onMounted(() => {
         </div>
 
         <!-- Pinned Meal Content -->
-        <div v-if="getPinnedMeal(sm.name)" class="pinned-slot-body">
+        <div v-if="getPinnedMeal(sm.type)" class="pinned-slot-body">
           <div
-            v-if="getPinnedMeal(sm.name)!.items.length === 0"
+            v-if="getPinnedMeal(sm.type)!.items.length === 0"
             class="empty-pinned-items"
           >
             <span>Позиції ще не додано</span>
@@ -409,10 +411,10 @@ onMounted(() => {
 
           <div v-else class="pinned-items-list">
             <div
-              v-for="item in getPinnedMeal(sm.name)!.items"
+              v-for="item in getPinnedMeal(sm.type)!.items"
               :key="item.id"
               class="pinned-item-row"
-              @click="openEditItem(sm.name, item)"
+              @click="openEditItem(sm.type, item)"
             >
               <div class="pinned-item-info">
                 <span class="pinned-item-title">{{ item.title }}</span>
@@ -437,7 +439,7 @@ onMounted(() => {
                   type="button"
                   class="btn-icon-sm edit-pin-item-btn"
                   title="Редагувати позицію"
-                  @click.stop="openEditItem(sm.name, item)"
+                  @click.stop="openEditItem(sm.type, item)"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 20h9"></path>
@@ -448,7 +450,7 @@ onMounted(() => {
                   type="button"
                   class="btn-icon-sm delete-pin-item-btn"
                   title="Видалити позицію"
-                  @click.stop="quickDeleteItem(sm.name, item.id)"
+                  @click.stop="quickDeleteItem(sm.type, item.id)"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -462,7 +464,7 @@ onMounted(() => {
           <button
             type="button"
             class="btn btn-secondary btn-full add-pinned-item-btn"
-            @click="openAddItem(sm.name)"
+            @click="openAddItem(sm.type)"
           >
             + Додати страву або продукт
           </button>
@@ -474,7 +476,7 @@ onMounted(() => {
           <button
             type="button"
             class="btn btn-secondary btn-sm compose-pin-btn"
-            @click="openAddItem(sm.name)"
+            @click="openAddItem(sm.type)"
           >
             + Скласти постійний прийом
           </button>

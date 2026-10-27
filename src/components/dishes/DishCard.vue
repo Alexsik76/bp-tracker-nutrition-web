@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DishRead, DishKind } from '../../types/nutrition';
+import { mealTypeLabel } from '../../utils/mealTypes';
 
 defineProps<{
   dish: DishRead;
@@ -20,8 +21,8 @@ const emit = defineEmits<{
       <div class="dish-title-area" @click="emit('edit', dish)">
         <h3 class="dish-name">{{ dish.name }}</h3>
         <div class="dish-meta">
-          <span v-if="dish.fixed_slot" class="badge badge-info">
-            {{ dish.fixed_slot }}
+          <span v-if="dish.fixed_meal_type" class="badge badge-info">
+            {{ mealTypeLabel(dish.fixed_meal_type) }}
           </span>
           <span v-if="dish.cooked_on && activeKind === 'ready'" class="cooked-date num-mono">
             Приготовлено: {{ dish.cooked_on }}

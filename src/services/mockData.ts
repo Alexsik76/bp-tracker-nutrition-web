@@ -26,7 +26,9 @@ import type {
   PinnedMealUpsert,
   PinnedMealItemRead,
   AvailablePin,
+  MealType,
 } from '../types/nutrition';
+import { mealTypeLabel, mealTypeOrder } from '../utils/mealTypes';
 
 let mockProfile: NutritionProfileRead = {
   user_id: 'dev-bypass-user',
@@ -39,9 +41,9 @@ let mockProfile: NutritionProfileRead = {
   restrictions: 'Видалений жовчний міхур у лютому 2026. Помірна кількість жирів за прийом.',
   dislikes: 'Селера, кінза, надлишок молочних продуктів',
   meals: [
-    { name: 'Сніданок', time: '08:30' },
-    { name: 'Обід', time: '13:30' },
-    { name: 'Вечеря', time: '19:00' },
+    { type: 'breakfast', time: '08:30' },
+    { type: 'lunch', time: '13:30' },
+    { type: 'dinner', time: '19:00' },
   ],
   updated_at: new Date().toISOString(),
 };
@@ -118,7 +120,7 @@ let mockDishes: DishRead[] = [
     cooked_weight_g: 600,
     remaining_g: 350,
     cooked_on: new Date().toISOString().slice(0, 10),
-    fixed_slot: null,
+    fixed_meal_type: null,
     notes: 'Свіжа риба на 2 дні',
     components: [
       { id: 'comp-1', dish_id: 'dish-1', name: 'Форель', raw_weight_g: 700, cooked_weight_g: 600 },
@@ -134,7 +136,7 @@ let mockDishes: DishRead[] = [
     cooked_weight_g: null,
     remaining_g: null,
     cooked_on: null,
-    fixed_slot: 'Сніданок',
+    fixed_meal_type: 'breakfast',
     notes: 'Постійна ранкова страва',
     components: [
       { id: 'comp-2', dish_id: 'dish-2', name: 'Вівсянка суха', raw_weight_g: 45, cooked_weight_g: null },
@@ -148,7 +150,7 @@ let mockDishes: DishRead[] = [
 let mockPinnedMeals: PinnedMealRead[] = [
   {
     id: 'pin-1',
-    slot: 'Сніданок',
+    meal_type: 'breakfast',
     active: true,
     items: [
       {
@@ -185,7 +187,7 @@ let mockMenus: MenuRead[] = [
     id: 'menu-1',
     user_id: 'dev-bypass-user',
     date: new Date().toISOString().slice(0, 10),
-    slot: 'Сніданок',
+    meal_type: 'breakfast',
     time: '08:30',
     status: 'eaten',
     eaten_at: new Date().toISOString(),
@@ -229,7 +231,7 @@ let mockMenus: MenuRead[] = [
     id: 'menu-2',
     user_id: 'dev-bypass-user',
     date: new Date().toISOString().slice(0, 10),
-    slot: 'Обід',
+    meal_type: 'lunch',
     time: '13:30',
     status: 'planned',
     eaten_at: null,
@@ -273,7 +275,7 @@ let mockMenus: MenuRead[] = [
     id: 'menu-3',
     user_id: 'dev-bypass-user',
     date: new Date().toISOString().slice(0, 10),
-    slot: 'Вечеря',
+    meal_type: 'dinner',
     time: '19:00',
     status: 'planned',
     eaten_at: null,
@@ -409,7 +411,7 @@ export const mockNutritionApi = {
       cooked_weight_g: data.cooked_weight_g || null,
       remaining_g: data.remaining_g !== undefined ? data.remaining_g : (data.cooked_weight_g || null),
       cooked_on: data.cooked_on || null,
-      fixed_slot: data.fixed_slot || null,
+      fixed_meal_type: data.fixed_meal_type || null,
       notes: data.notes || null,
       components: (data.components || []).map((c, idx) => ({
         id: `comp-${Date.now()}-${idx}`,
@@ -441,7 +443,7 @@ export const mockNutritionApi = {
   getDayMenus: async (menuDate: string): Promise<DayMenuRead> => {
     // 1. Gather persisted menus for this date (excluding deleted ones)
     const persisted = mockMenus
-      .filter((m) => (m.date === menuDate || !m.date) && !mockDeletedSlots.has(`${menuDate}:${m.slot}`))
+      .filter((m) => (m.date === menuDate || !m.date) && !mockDeletedSlots.has(`${menuDate}:${m.meal_type}`))
       .map((m) => ({ ...m, date: menuDate }));
 
     for (const m of persisted) {
@@ -449,18 +451,18 @@ export const mockNutritionApi = {
     }
 
     // 2. Project profile schedule meals not yet persisted and not deleted
-    const persistedSlots = new Set(persisted.map((m) => m.slot.toLowerCase()));
+    const persistedSlots = new Set(persisted.map((m) => m.meal_type));
     const projected: MenuRead[] = [];
 
     for (const pm of mockProfile.meals) {
-      const isDeleted = mockDeletedSlots.has(`${menuDate}:${pm.name}`);
-      const isPersisted = persistedSlots.has(pm.name.toLowerCase());
-      const isUnpinned = mockUnpinnedDaySlots.has(`${menuDate}:${pm.name}`);
+      const isDeleted = mockDeletedSlots.has(`${menuDate}:${pm.type}`);
+      const isPersisted = persistedSlots.has(pm.type);
+      const isUnpinned = mockUnpinnedDaySlots.has(`${menuDate}:${pm.type}`);
       if (!isDeleted && !isPersisted) {
-        const activePin = !isUnpinned && mockPinnedMeals.find((p) => p.active && p.slot.toLowerCase() === pm.name.toLowerCase());
+        const activePin = !isUnpinned && mockPinnedMeals.find((p) => p.active && p.meal_type === pm.type);
         const items: MenuItemRead[] = activePin ? activePin.items.map((pi) => ({
           id: `item-proj-${pi.id}`,
-          menu_id: `menu-proj-${pm.name}`,
+          menu_id: `menu-proj-${pm.type}`,
           dish_id: pi.dish_id,
           product_id: pi.product_id,
           title: pi.title,
@@ -477,7 +479,7 @@ export const mockNutritionApi = {
           id: null,
           user_id: 'dev-bypass-user',
           date: menuDate,
-          slot: pm.name,
+          meal_type: pm.type,
           time: pm.time,
           status: 'planned',
           eaten_at: null,
@@ -499,10 +501,10 @@ export const mockNutritionApi = {
     const availablePins: AvailablePin[] = [];
     for (const pm of mockPinnedMeals) {
       if (!pm.active) continue;
-      const matchingMenu = allMenus.find((m) => m.slot.toLowerCase() === pm.slot.toLowerCase());
+      const matchingMenu = allMenus.find((m) => m.meal_type === pm.meal_type);
       if (!matchingMenu || !matchingMenu.pinned) {
         availablePins.push({
-          slot: pm.slot,
+          meal_type: pm.meal_type,
           pinned_meal_id: pm.id,
         });
       }
@@ -523,7 +525,7 @@ export const mockNutritionApi = {
       } else if (b.time) {
         return 1;
       }
-      return a.slot.localeCompare(b.slot);
+      return mealTypeOrder(a.meal_type) - mealTypeOrder(b.meal_type);
     });
 
     return {
@@ -549,23 +551,23 @@ export const mockNutritionApi = {
   },
 
   createMeal: async (menuDate: string, data: MealCreate): Promise<MenuRead> => {
-    const slotLower = data.slot.trim().toLowerCase();
+    const slotLower = data.meal_type;
     const existsPersisted = mockMenus.some(
-      (m) => (m.date === menuDate || !m.date) && m.slot.toLowerCase() === slotLower
+      (m) => (m.date === menuDate || !m.date) && m.meal_type === slotLower
     );
-    const existsProjected = !mockDeletedSlots.has(`${menuDate}:${data.slot}`) &&
-      mockProfile.meals.some((pm) => pm.name.toLowerCase() === slotLower);
+    const existsProjected = !mockDeletedSlots.has(`${menuDate}:${data.meal_type}`) &&
+      mockProfile.meals.some((pm) => pm.type === slotLower);
 
     if (existsPersisted || existsProjected) {
-      throw new ApiError(`Meal «${data.slot}» already exists`, 409);
+      throw new ApiError(`Meal «${data.meal_type}» already exists`, 409);
     }
 
-    mockDeletedSlots.delete(`${menuDate}:${data.slot}`);
+    mockDeletedSlots.delete(`${menuDate}:${data.meal_type}`);
     const newMenu: MenuRead = {
       id: `menu-${Date.now()}`,
       user_id: 'dev-bypass-user',
       date: menuDate,
-      slot: data.slot.trim(),
+      meal_type: data.meal_type,
       time: data.time.trim(),
       status: 'planned',
       eaten_at: null,
@@ -580,10 +582,10 @@ export const mockNutritionApi = {
     return JSON.parse(JSON.stringify(newMenu));
   },
 
-  deleteMeal: async (menuDate: string, slot: string): Promise<void> => {
-    const slotLower = slot.trim().toLowerCase();
+  deleteMeal: async (menuDate: string, slot: MealType): Promise<void> => {
+    const slotLower = slot;
     const existing = mockMenus.find(
-      (m) => (m.date === menuDate || !m.date) && m.slot.toLowerCase() === slotLower
+      (m) => (m.date === menuDate || !m.date) && m.meal_type === slotLower
     );
 
     if (existing && existing.status === 'eaten') {
@@ -602,15 +604,15 @@ export const mockNutritionApi = {
 
     if (!existing) {
       const isUnpinned = mockUnpinnedDaySlots.has(`${menuDate}:${slot}`);
-      const activePin = !isUnpinned && mockPinnedMeals.find((p) => p.active && p.slot.toLowerCase() === slotLower);
+      const activePin = !isUnpinned && mockPinnedMeals.find((p) => p.active && p.meal_type === slotLower);
       if (activePin) {
         mockUnpinnedDaySlots.add(`${menuDate}:${slot}`);
-        const pmSchedule = mockProfile.meals.find((p) => p.name.toLowerCase() === slotLower);
+        const pmSchedule = mockProfile.meals.find((p) => p.type === slotLower);
         const emptyMenu: MenuRead = {
           id: `menu-${Date.now()}`,
           user_id: 'dev-bypass-user',
           date: menuDate,
-          slot: pmSchedule?.name || slot,
+          meal_type: pmSchedule?.type || slot,
           time: pmSchedule?.time || null,
           status: 'planned',
           eaten_at: null,
@@ -629,18 +631,18 @@ export const mockNutritionApi = {
     mockDeletedSlots.add(`${menuDate}:${slot}`);
     mockUnpinnedDaySlots.delete(`${menuDate}:${slot}`);
     mockMenus = mockMenus.filter(
-      (m) => !(m.date === menuDate && m.slot.toLowerCase() === slotLower) &&
-             !(m.slot.toLowerCase() === slotLower)
+      (m) => !(m.date === menuDate && m.meal_type === slotLower) &&
+             !(m.meal_type === slotLower)
     );
   },
 
   generateMenu: async (menuDate: string, data: GenerationRequest): Promise<GenerationResultRead> => {
-    if (data.scope === 'slot' && data.slot) {
-      const slotName = data.slot;
+    if (data.scope === 'slot' && data.meal_type) {
+      const slotName = data.meal_type;
       let slotMenu: MenuRead;
-      const existing = mockMenus.find((m) => m.slot.toLowerCase() === slotName.toLowerCase());
+      const existing = mockMenus.find((m) => m.meal_type === slotName.toLowerCase());
       if (existing && existing.status === 'eaten') {
-        throw new ApiError(`Прийом «${slotName}» вже зʼїдено (спочатку зніміть позначку «з\'їдено»)`, 409);
+        throw new ApiError(`Прийом «${mealTypeLabel(slotName)}» вже зʼїдено (спочатку зніміть позначку «з\'їдено»)`, 409);
       }
 
       // Simulate two-stage server processing
@@ -651,8 +653,8 @@ export const mockNutritionApi = {
           id: `menu-${Date.now()}`,
           user_id: 'dev-bypass-user',
           date: menuDate,
-          slot: slotName,
-          time: mockProfile.meals.find((pm) => pm.name === slotName)?.time || null,
+          meal_type: slotName,
+          time: mockProfile.meals.find((pm) => pm.type === slotName)?.time || null,
           status: 'planned',
           eaten_at: null,
           regenerations: 0,
@@ -661,9 +663,9 @@ export const mockNutritionApi = {
             {
               id: `item-${Date.now()}-1`,
               menu_id: `menu-${slotName}`,
-              dish_id: slotName === 'Обід' ? 'dish-1' : null,
+              dish_id: slotName === 'lunch' ? 'dish-1' : null,
               product_id: null,
-              title: slotName === 'Обід' ? 'Запечена форель з лимоном' : `Збалансована страва для «${slotName}»`,
+              title: slotName === 'lunch' ? 'Запечена форель з лимоном' : `Збалансована страва для «${mealTypeLabel(slotName)}»`,
               portion_g: 250,
               portion_text: null,
               kcal_est: 380,
@@ -701,9 +703,9 @@ export const mockNutritionApi = {
           {
             id: `item-${Date.now()}-1`,
             menu_id: slotMenu.id,
-            dish_id: slotName === 'Обід' ? 'dish-1' : null,
+            dish_id: slotName === 'lunch' ? 'dish-1' : null,
             product_id: null,
-            title: slotName === 'Обід' ? 'Запечена форель з овочами' : `Перерахована страва для «${slotName}» (вар. ${slotMenu.regenerations})`,
+            title: slotName === 'lunch' ? 'Запечена форель з овочами' : `Перерахована страва для «${mealTypeLabel(slotName)}» (вар. ${slotMenu.regenerations})`,
             portion_g: 280,
             portion_text: null,
             kcal_est: 410,
@@ -734,7 +736,7 @@ export const mockNutritionApi = {
       const dayResult = await mockNutritionApi.getDayMenus(menuDate);
       return {
         menus: dayResult.menus,
-        rationale: `Окремо згенеровано прийом «${slotName}» з урахуванням цілей харчування.`,
+        rationale: `Окремо згенеровано прийом «${mealTypeLabel(slotName)}» з урахуванням цілей харчування.`,
         shopping_list: ['Свіжа зелень', 'Огірки свіжі'],
       };
     }
@@ -749,7 +751,7 @@ export const mockNutritionApi = {
 
     for (const m of mockMenus) {
       if (!m.id) {
-        m.id = `menu-${Date.now()}-${m.slot}`;
+        m.id = `menu-${Date.now()}-${m.meal_type}`;
       }
       if (m.pinned || m.status === 'eaten') {
         continue;
@@ -759,9 +761,9 @@ export const mockNutritionApi = {
         {
           id: `item-${Date.now()}-${m.id}-1`,
           menu_id: m.id,
-          dish_id: m.slot === 'Обід' ? 'dish-1' : null,
+          dish_id: m.meal_type === 'lunch' ? 'dish-1' : null,
           product_id: null,
-          title: `Страва для «${m.slot}» (вар. ${m.regenerations})`,
+          title: `Страва для «${mealTypeLabel(m.meal_type)}» (вар. ${m.regenerations})`,
           portion_g: 250,
           portion_text: null,
           kcal_est: 350,
@@ -783,8 +785,8 @@ export const mockNutritionApi = {
     };
   },
 
-  estimateMenu: async (menuDate: string, slot?: string): Promise<DayMenuRead> => {
-    const targets = slot ? mockMenus.filter((m) => m.slot === slot) : mockMenus;
+  estimateMenu: async (menuDate: string, slot?: MealType): Promise<DayMenuRead> => {
+    const targets = slot ? mockMenus.filter((m) => m.meal_type === slot) : mockMenus;
     for (const m of targets) {
       for (const it of m.items) {
         if (it.kcal_est === null || it.kcal_est === undefined) {
@@ -797,21 +799,21 @@ export const mockNutritionApi = {
     return mockNutritionApi.getDayMenus(menuDate);
   },
 
-  addMenuItem: async (_menuDate: string, slot: string, data: MenuItemCreate): Promise<MenuItemRead> => {
+  addMenuItem: async (_menuDate: string, slot: MealType, data: MenuItemCreate): Promise<MenuItemRead> => {
     const hasKcal = data.kcal_est !== undefined && data.kcal_est !== null;
-    let target = mockMenus.find((m) => (m.date === _menuDate || !m.date) && m.slot === slot);
+    let target = mockMenus.find((m) => (m.date === _menuDate || !m.date) && m.meal_type === slot);
     if (target && target.status === 'eaten') {
       throw new ApiError('Не можна додати позицію до завершеного прийому (спочатку зніміть позначку «з\'їдено»)', 409, {
         detail: 'Не можна додати позицію до завершеного прийому (спочатку зніміть позначку «з\'їдено»)',
       });
     }
     if (!target) {
-      const pm = mockProfile.meals.find((p) => p.name === slot);
+      const pm = mockProfile.meals.find((p) => p.type === slot);
       target = {
         id: `menu-${Date.now()}`,
         user_id: 'dev-bypass-user',
         date: _menuDate,
-        slot: slot,
+        meal_type: slot,
         time: pm?.time || null,
         status: 'planned',
         eaten_at: null,
@@ -959,18 +961,18 @@ export const mockNutritionApi = {
     return JSON.parse(JSON.stringify(note));
   },
 
-  pinMeal: async (menuDate: string, slot: string): Promise<MenuRead> => {
-    const slotLower = slot.trim().toLowerCase();
-    const pinnedMeal = mockPinnedMeals.find((pm) => pm.slot.toLowerCase() === slotLower);
+  pinMeal: async (menuDate: string, slot: MealType): Promise<MenuRead> => {
+    const slotLower = slot;
+    const pinnedMeal = mockPinnedMeals.find((pm) => pm.meal_type === slotLower);
     if (!pinnedMeal) {
-      throw new ApiError(`Закріплений прийом для «${slot}» не знайдено`, 404);
+      throw new ApiError(`Закріплений прийом для «${mealTypeLabel(slot)}» не знайдено`, 404);
     }
 
     mockDeletedSlots.delete(`${menuDate}:${slot}`);
     mockUnpinnedDaySlots.delete(`${menuDate}:${slot}`);
 
     let menu = mockMenus.find(
-      (m) => (m.date === menuDate || !m.date) && m.slot.toLowerCase() === slotLower
+      (m) => (m.date === menuDate || !m.date) && m.meal_type === slotLower
     );
 
     if (menu && menu.status === 'eaten') {
@@ -979,7 +981,7 @@ export const mockNutritionApi = {
       });
     }
 
-    const pmSchedule = mockProfile.meals.find((p) => p.name.toLowerCase() === slotLower);
+    const pmSchedule = mockProfile.meals.find((p) => p.type === slotLower);
     const time = menu?.time || pmSchedule?.time || null;
 
     const pinnedItems: MenuItemRead[] = pinnedMeal.items.map((pi, idx) => ({
@@ -1006,7 +1008,7 @@ export const mockNutritionApi = {
         id: `menu-${Date.now()}`,
         user_id: 'dev-bypass-user',
         date: menuDate,
-        slot: slot,
+        meal_type: slot,
         time: time,
         status: 'planned',
         eaten_at: null,
@@ -1028,13 +1030,13 @@ export const mockNutritionApi = {
     return JSON.parse(JSON.stringify(mockPinnedMeals));
   },
 
-  upsertPinnedMeal: async (slot: string, data: PinnedMealUpsert): Promise<PinnedMealRead> => {
-    const slotTrimmed = slot.trim();
+  upsertPinnedMeal: async (slot: MealType, data: PinnedMealUpsert): Promise<PinnedMealRead> => {
+    const slotTrimmed = slot;
     const inSchedule = mockProfile.meals.some(
-      (m) => m.name.toLowerCase() === slotTrimmed.toLowerCase()
+      (m) => m.type === slotTrimmed
     );
     if (!inSchedule) {
-      throw new ApiError(`Прийом «${slot}» відсутній у розкладі профілю`, 400);
+      throw new ApiError(`Прийом «${mealTypeLabel(slot)}» відсутній у розкладі профілю`, 400);
     }
 
     for (const item of data.items) {
@@ -1047,7 +1049,7 @@ export const mockNutritionApi = {
     }
 
     let existing = mockPinnedMeals.find(
-      (pm) => pm.slot.toLowerCase() === slotTrimmed.toLowerCase()
+      (pm) => pm.meal_type === slotTrimmed
     );
 
     const now = new Date().toISOString();
@@ -1069,7 +1071,7 @@ export const mockNutritionApi = {
     } else {
       existing = {
         id: `pin-${Date.now()}`,
-        slot: slotTrimmed,
+        meal_type: slotTrimmed,
         active: data.active,
         items: formattedItems,
         created_at: now,
@@ -1081,9 +1083,9 @@ export const mockNutritionApi = {
     return JSON.parse(JSON.stringify(existing));
   },
 
-  deletePinnedMeal: async (slot: string): Promise<void> => {
+  deletePinnedMeal: async (slot: MealType): Promise<void> => {
     mockPinnedMeals = mockPinnedMeals.filter(
-      (pm) => pm.slot.toLowerCase() !== slot.trim().toLowerCase()
+      (pm) => pm.meal_type !== slot
     );
   },
 };

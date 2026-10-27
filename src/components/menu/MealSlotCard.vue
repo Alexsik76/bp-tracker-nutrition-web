@@ -2,25 +2,26 @@
 import { computed } from 'vue';
 import MenuItemRow from './MenuItemRow.vue';
 import { formatTime24 } from '../../utils/date';
-import type { MenuRead, MenuItemRead } from '../../types/nutrition';
+import type { MenuRead, MenuItemRead, MealType } from '../../types/nutrition';
+import { mealTypeLabel } from '../../utils/mealTypes';
 
 const props = defineProps<{
   menu: MenuRead;
   generating?: boolean;
-  generatingSlot?: string | null;
+  generatingSlot?: MealType | null;
   generationStageText?: string;
-  estimatingSlot?: string | null;
+  estimatingSlot?: MealType | null;
   hasAvailablePin?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'toggle-eaten', menu: MenuRead): void;
-  (e: 'add-item', slot: string): void;
-  (e: 'generate-slot', slot: string): void;
-  (e: 'estimate-slot', slot: string): void;
+  (e: 'add-item', slot: MealType): void;
+  (e: 'generate-slot', slot: MealType): void;
+  (e: 'estimate-slot', slot: MealType): void;
   (e: 'edit-item', item: MenuItemRead): void;
   (e: 'delete-meal', menu: MenuRead): void;
-  (e: 'restore-pin', slot: string): void;
+  (e: 'restore-pin', slot: MealType): void;
 }>();
 
 function getSlotKcal(menu: MenuRead): number {
@@ -29,8 +30,8 @@ function getSlotKcal(menu: MenuRead): number {
 
 const deleteMealTooltip = computed(() => {
   return props.menu.pinned
-    ? `Зняти закріплення з «${props.menu.slot}» на цей день`
-    : `Видалити «${props.menu.slot}»`;
+    ? `Зняти закріплення з «${mealTypeLabel(props.menu.meal_type)}» на цей день`
+    : `Видалити «${mealTypeLabel(props.menu.meal_type)}»`;
 });
 </script>
 
@@ -45,7 +46,7 @@ const deleteMealTooltip = computed(() => {
     <!-- Slot Header -->
     <div class="slot-header">
       <div class="slot-title-group">
-        <h2 class="slot-title">{{ menu.slot }}</h2>
+        <h2 class="slot-title">{{ mealTypeLabel(menu.meal_type) }}</h2>
         <span v-if="menu.pinned" class="badge badge-primary slot-pin-badge" title="Закріплений прийом їжі">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="17" x2="12" y2="22"></line>
@@ -58,7 +59,7 @@ const deleteMealTooltip = computed(() => {
           type="button"
           class="btn-pin-chip"
           title="Відновити закріплений прийом"
-          @click="emit('restore-pin', menu.slot)"
+          @click="emit('restore-pin', menu.meal_type)"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="17" x2="12" y2="22"></line>
@@ -74,11 +75,11 @@ const deleteMealTooltip = computed(() => {
           type="button"
           class="btn-estimate"
           :disabled="Boolean(estimatingSlot)"
-          :title="`Оцінити калорійність для «${menu.slot}»`"
-          @click="emit('estimate-slot', menu.slot)"
+          :title="`Оцінити калорійність для «${mealTypeLabel(menu.meal_type)}»`"
+          @click="emit('estimate-slot', menu.meal_type)"
         >
-          <span v-if="estimatingSlot === menu.slot" class="spinner-sm"></span>
-          <span>{{ estimatingSlot === menu.slot ? 'Оцінюємо...' : 'Оцінити' }}</span>
+          <span v-if="estimatingSlot === menu.meal_type" class="spinner-sm"></span>
+          <span>{{ estimatingSlot === menu.meal_type ? 'Оцінюємо...' : 'Оцінити' }}</span>
         </button>
       </div>
 
@@ -126,7 +127,7 @@ const deleteMealTooltip = computed(() => {
         v-if="menu.status !== 'eaten'"
         type="button"
         class="btn-action-text"
-        @click="emit('add-item', menu.slot)"
+        @click="emit('add-item', menu.meal_type)"
       >
         + Додати позицію
       </button>
@@ -135,7 +136,7 @@ const deleteMealTooltip = computed(() => {
       <div class="slot-buttons">
         <!-- Regenerating slot indicator -->
         <div
-          v-if="generatingSlot === menu.slot"
+          v-if="generatingSlot === menu.meal_type"
           class="slot-generating-pill"
         >
           <span class="spinner-sm"></span>
@@ -148,9 +149,9 @@ const deleteMealTooltip = computed(() => {
           type="button"
           class="btn-icon slot-ctrl-btn"
           :disabled="generating"
-          @click="emit('generate-slot', menu.slot)"
-          :title="`ШІ: перегенерувати прийом «${menu.slot}»`"
-          :aria-label="`ШІ: перегенерувати прийом «${menu.slot}»`"
+          @click="emit('generate-slot', menu.meal_type)"
+          :title="`ШІ: перегенерувати прийом «${mealTypeLabel(menu.meal_type)}»`"
+          :aria-label="`ШІ: перегенерувати прийом «${mealTypeLabel(menu.meal_type)}»`"
         >
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"></polyline>
@@ -160,7 +161,7 @@ const deleteMealTooltip = computed(() => {
 
         <!-- Eaten / Cancel button -->
         <button
-          v-if="menu.id && menu.status === 'eaten' && generatingSlot !== menu.slot"
+          v-if="menu.id && menu.status === 'eaten' && generatingSlot !== menu.meal_type"
           type="button"
           class="btn btn-secondary btn-sm-action"
           :disabled="generating"
@@ -169,7 +170,7 @@ const deleteMealTooltip = computed(() => {
           Скасувати
         </button>
         <button
-          v-else-if="menu.id && menu.items.length > 0 && menu.status !== 'eaten' && generatingSlot !== menu.slot"
+          v-else-if="menu.id && menu.items.length > 0 && menu.status !== 'eaten' && generatingSlot !== menu.meal_type"
           type="button"
           class="btn btn-primary btn-sm-action"
           :disabled="generating"

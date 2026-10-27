@@ -3,12 +3,13 @@ import { ref, watch } from 'vue';
 import ModalSheet from '../ModalSheet.vue';
 import DishProductPicker, { type PickerSourceType } from '../DishProductPicker.vue';
 import { useToastStore } from '../../stores/toast';
-import type { DishRead, ProductRead } from '../../types/nutrition';
+import type { DishRead, ProductRead, MealType } from '../../types/nutrition';
+import { mealTypeLabel } from '../../utils/mealTypes';
 
 const props = withDefaults(
   defineProps<{
     show: boolean;
-    slotName: string | null;
+    slotName: MealType | null;
     availableDishes: DishRead[];
     availableProducts: ProductRead[];
     adding: boolean;
@@ -137,7 +138,7 @@ function handleSubmit() {
 <template>
   <ModalSheet
     :show="show"
-    :title="`Додати в «${slotName}»`"
+    :title="`Додати в «${mealTypeLabel(slotName)}»`"
     @close="emit('close')"
   >
     <form @submit.prevent="handleSubmit" class="add-item-form">
