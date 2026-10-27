@@ -23,7 +23,6 @@ const props = defineProps<{
 const toastStore = useToastStore();
 const {
   availableDishes,
-  availableProducts,
   loadInventory,
 } = useInventory();
 
@@ -49,15 +48,21 @@ const editingItemProxy = computed<MenuItemRead | null>(() => {
     id: editingPinItem.value.id,
     menu_id: 'pinned',
     dish_id: editingPinItem.value.dish_id,
-    product_id: editingPinItem.value.product_id,
     title: editingPinItem.value.title,
     portion_g: editingPinItem.value.portion_g,
     portion_text: editingPinItem.value.portion_text,
-    kcal_est: editingPinItem.value.kcal_est,
-    kcal_source: editingPinItem.value.kcal_est ? 'user' : null,
+    kcal: editingPinItem.value.kcal ?? null,
+    protein_g: editingPinItem.value.protein_g ?? null,
+    fat_g: editingPinItem.value.fat_g ?? null,
+    carbs_g: editingPinItem.value.carbs_g ?? null,
+    fiber_g: editingPinItem.value.fiber_g ?? null,
+    sugar_g: editingPinItem.value.sugar_g ?? null,
+    sodium_mg: editingPinItem.value.sodium_mg ?? null,
+    nutrition_source: 'user',
     origin: 'manual',
     position: editingPinItem.value.position,
     incomplete: false,
+    updated_at: new Date().toISOString(),
   };
 });
 
@@ -68,7 +73,7 @@ function getPinnedMeal(slotName: MealType): PinnedMealRead | undefined {
 }
 
 function calculateSlotKcal(items: PinnedMealItemRead[]): number {
-  return items.reduce((sum, item) => sum + (item.kcal_est || 0), 0);
+  return items.reduce((sum, item) => sum + (item.kcal || 0), 0);
 }
 
 async function loadPinned() {
@@ -91,11 +96,10 @@ async function openAddItem(slotName: MealType) {
 
 async function handleSaveNewItem(payload: {
   dishId?: string;
-  productId?: string;
   title?: string;
   portionG?: number;
   portionText?: string;
-  kcalEst?: number;
+  kcal?: number;
 }) {
   if (!activeSlotForAdd.value) return;
 
@@ -106,21 +110,25 @@ async function handleSaveNewItem(payload: {
     const existing = getPinnedMeal(slotName);
     const existingItems: PinnedMealItemUpsert[] = (existing?.items || []).map((it, idx) => ({
       dish_id: it.dish_id,
-      product_id: it.product_id,
       title: it.title,
       portion_g: it.portion_g,
       portion_text: it.portion_text,
-      kcal_est: it.kcal_est,
+      kcal: it.kcal ?? null,
+      protein_g: it.protein_g ?? null,
+      fat_g: it.fat_g ?? null,
+      carbs_g: it.carbs_g ?? null,
+      fiber_g: it.fiber_g ?? null,
+      sugar_g: it.sugar_g ?? null,
+      sodium_mg: it.sodium_mg ?? null,
       position: it.position ?? idx,
     }));
 
     const newItem: PinnedMealItemUpsert = {
       dish_id: payload.dishId || null,
-      product_id: payload.productId || null,
       title: payload.title || null,
       portion_g: payload.portionG !== undefined ? payload.portionG : null,
       portion_text: payload.portionText || null,
-      kcal_est: payload.kcalEst !== undefined ? payload.kcalEst : null,
+      kcal: payload.kcal !== undefined ? payload.kcal : null,
       position: existingItems.length,
     };
 
@@ -163,7 +171,7 @@ async function handleSaveItemEdit(payload: {
   title?: string;
   portionG?: number | null;
   portionText?: string | null;
-  kcalEst?: number | null;
+  kcal?: number | null;
 }) {
   if (!activeSlotForEdit.value || !editingPinItem.value) return;
 
@@ -177,23 +185,34 @@ async function handleSaveItemEdit(payload: {
 
     const updatedItems: PinnedMealItemUpsert[] = existing.items.map((it, idx) => {
       if (it.id === itemId) {
+        const kcalVal = payload.kcal !== undefined ? payload.kcal : (it.kcal ?? null);
         return {
           dish_id: it.dish_id,
-          product_id: it.product_id,
           title: payload.title !== undefined ? payload.title : it.title,
           portion_g: payload.portionG !== undefined ? payload.portionG : it.portion_g,
           portion_text: payload.portionText !== undefined ? payload.portionText : it.portion_text,
-          kcal_est: payload.kcalEst !== undefined ? payload.kcalEst : it.kcal_est,
+          kcal: kcalVal,
+          protein_g: it.protein_g ?? null,
+          fat_g: it.fat_g ?? null,
+          carbs_g: it.carbs_g ?? null,
+          fiber_g: it.fiber_g ?? null,
+          sugar_g: it.sugar_g ?? null,
+          sodium_mg: it.sodium_mg ?? null,
           position: it.position ?? idx,
         };
       }
       return {
         dish_id: it.dish_id,
-        product_id: it.product_id,
         title: it.title,
         portion_g: it.portion_g,
         portion_text: it.portion_text,
-        kcal_est: it.kcal_est,
+        kcal: it.kcal ?? null,
+        protein_g: it.protein_g ?? null,
+        fat_g: it.fat_g ?? null,
+        carbs_g: it.carbs_g ?? null,
+        fiber_g: it.fiber_g ?? null,
+        sugar_g: it.sugar_g ?? null,
+        sodium_mg: it.sodium_mg ?? null,
         position: it.position ?? idx,
       };
     });
@@ -235,11 +254,16 @@ async function quickDeleteItem(slotName: MealType, itemId: string) {
       .filter((it) => it.id !== itemId)
       .map((it, idx) => ({
         dish_id: it.dish_id,
-        product_id: it.product_id,
         title: it.title,
         portion_g: it.portion_g,
         portion_text: it.portion_text,
-        kcal_est: it.kcal_est,
+        kcal: it.kcal ?? null,
+        protein_g: it.protein_g ?? null,
+        fat_g: it.fat_g ?? null,
+        carbs_g: it.carbs_g ?? null,
+        fiber_g: it.fiber_g ?? null,
+        sugar_g: it.sugar_g ?? null,
+        sodium_mg: it.sodium_mg ?? null,
         position: idx,
       }));
 
@@ -272,11 +296,16 @@ async function toggleActive(slotName: MealType) {
   try {
     const items: PinnedMealItemUpsert[] = existing.items.map((it, idx) => ({
       dish_id: it.dish_id,
-      product_id: it.product_id,
       title: it.title,
       portion_g: it.portion_g,
       portion_text: it.portion_text,
-      kcal_est: it.kcal_est,
+      kcal: it.kcal ?? null,
+      protein_g: it.protein_g ?? null,
+      fat_g: it.fat_g ?? null,
+      carbs_g: it.carbs_g ?? null,
+      fiber_g: it.fiber_g ?? null,
+      sugar_g: it.sugar_g ?? null,
+      sodium_mg: it.sodium_mg ?? null,
       position: it.position ?? idx,
     }));
 
@@ -297,8 +326,8 @@ async function toggleActive(slotName: MealType) {
       'info'
     );
   } catch (err: unknown) {
-    console.error('Error toggling active status:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення статусу', 'error');
+    console.error('Error toggling pinned meal active:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка збереження статусу', 'error');
   } finally {
     savingSlot.value = null;
   }
@@ -426,10 +455,16 @@ onMounted(() => {
                     {{ item.portion_text }}
                   </span>
                   <span
-                    v-if="item.kcal_est !== null && item.kcal_est !== undefined"
+                    v-if="item.kcal !== null && item.kcal !== undefined"
                     class="num-mono kcal-pill"
                   >
-                    {{ item.kcal_est }} ккал
+                    {{ Math.round(item.kcal) }} ккал
+                  </span>
+                  <span
+                    v-if="item.protein_g !== null || item.fat_g !== null || item.carbs_g !== null"
+                    class="num-mono macros-pill"
+                  >
+                    Б: {{ item.protein_g ?? 0 }} · Ж: {{ item.fat_g ?? 0 }} · В: {{ item.carbs_g ?? 0 }}
                   </span>
                 </div>
               </div>
@@ -489,7 +524,6 @@ onMounted(() => {
       :show="isAddModalOpen"
       :slot-name="activeSlotForAdd"
       :available-dishes="availableDishes"
-      :available-products="availableProducts"
       :adding="addingItem"
       submit-label="Додати до прийому"
       @close="isAddModalOpen = false"
@@ -706,6 +740,11 @@ onMounted(() => {
 
 .kcal-pill {
   color: var(--info);
+}
+
+.macros-pill {
+  color: var(--text-muted);
+  font-size: 11.5px;
 }
 
 .pinned-item-actions {

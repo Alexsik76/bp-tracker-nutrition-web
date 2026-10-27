@@ -136,6 +136,20 @@ async function handleDeleteProduct() {
   }
 }
 
+async function handleEstimateProduct(product: ProductRead) {
+  try {
+    const updated = await nutritionApi.estimateProduct(product.id);
+    const index = products.value.findIndex((p) => p.id === product.id);
+    if (index !== -1) {
+      products.value[index] = updated;
+    }
+    toastStore.show(`Калорійність «${product.name}» успішно оцінено`, 'success');
+  } catch (err: unknown) {
+    console.error('Error estimating product:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка оцінки продукту', 'error');
+  }
+}
+
 onMounted(() => {
   loadProducts();
 });
@@ -190,6 +204,7 @@ onMounted(() => {
         @edit="openEditModal"
         @cycle-availability="cycleAvailability"
         @cycle-preference="cyclePreference"
+        @estimate="handleEstimateProduct"
       />
     </div>
 

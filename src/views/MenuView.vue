@@ -119,11 +119,10 @@ async function openAddItemModal(slot: MealType) {
 
 async function handleSaveNewItem(payload: {
   dishId?: string;
-  productId?: string;
   title?: string;
   portionG?: number;
   portionText?: string;
-  kcalEst?: number;
+  kcal?: number;
 }) {
   if (!activeSlotForAdd.value) return;
 
@@ -161,7 +160,7 @@ async function handleSaveItemEdit(payload: {
   title?: string;
   portionG?: number | null;
   portionText?: string | null;
-  kcalEst?: number | null;
+  kcal?: number | null;
 }) {
   if (!editingItem.value) return;
 
@@ -184,10 +183,9 @@ async function openReplaceItemModal(item: MenuItemRead) {
 
 async function handleSaveReplaceItem(payload: {
   dishId?: string;
-  productId?: string;
   portionG?: number | null;
   portionText?: string | null;
-  kcalEst?: number | null;
+  kcal?: number | null;
 }) {
   if (!replacingItem.value) return;
 

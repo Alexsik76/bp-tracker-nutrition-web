@@ -25,7 +25,7 @@ const emit = defineEmits<{
 }>();
 
 function getSlotKcal(menu: MenuRead): number {
-  return menu.items.reduce((sum, item) => sum + (item.kcal_est || 0), 0);
+  return menu.items.reduce((sum, item) => sum + (item.kcal || 0), 0);
 }
 
 const deleteMealTooltip = computed(() => {

@@ -9,7 +9,7 @@ const props = defineProps<{
   show: boolean;
   item: MenuItemRead | null;
   availableDishes: DishRead[];
-  availableProducts: ProductRead[];
+  availableProducts?: ProductRead[];
   saving: boolean;
 }>();
 
@@ -17,72 +17,55 @@ const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'save', payload: {
     dishId?: string;
-    productId?: string;
     portionG?: number | null;
     portionText?: string | null;
-    kcalEst?: number | null;
+    kcal?: number | null;
   }): void;
 }>();
 
 const toastStore = useToastStore();
 
-const replaceSourceType = ref<'dish' | 'product'>('dish');
+const replaceSourceType = ref<'dish' | 'custom'>('dish');
 const selectedReplaceDishId = ref<string | null>(null);
-const selectedReplaceProductId = ref<string | null>(null);
 const replacePortionG = ref<number | null>(null);
 const replacePortionText = ref('');
-const replaceKcalEst = ref<number | null>(null);
+const replaceKcal = ref<number | null>(null);
 
 watch(
   () => props.show,
   (isOpen) => {
     if (isOpen && props.item) {
-      replaceSourceType.value = props.item.dish_id ? 'dish' : (props.item.product_id ? 'product' : 'dish');
+      replaceSourceType.value = 'dish';
       selectedReplaceDishId.value = null;
-      selectedReplaceProductId.value = null;
       replacePortionG.value = props.item.portion_g;
       replacePortionText.value = props.item.portion_text || '';
-      replaceKcalEst.value = null;
+      replaceKcal.value = null;
     }
   }
 );
 
 function onSelectReplaceDish(dish: DishRead) {
   selectedReplaceDishId.value = dish.id;
-  selectedReplaceProductId.value = null;
   if (dish.remaining_g) {
     replacePortionG.value = Math.min(250, dish.remaining_g);
     replacePortionText.value = '';
   }
 }
 
-function onSelectReplaceProduct(prod: ProductRead) {
-  selectedReplaceProductId.value = prod.id;
-  selectedReplaceDishId.value = null;
-  if (prod.daily_limit_g) {
-    replacePortionG.value = prod.daily_limit_g;
-    replacePortionText.value = '';
-  }
-}
-
 function handleSubmit() {
   if (!props.item) return;
-  const isDish = replaceSourceType.value === 'dish';
-  const dishId = isDish ? (selectedReplaceDishId.value ?? undefined) : undefined;
-  const productId = !isDish ? (selectedReplaceProductId.value ?? undefined) : undefined;
 
-  if (!dishId && !productId) {
-    toastStore.show('Оберіть страву або продукт зі списку', 'warning');
+  if (!selectedReplaceDishId.value) {
+    toastStore.show('Оберіть страву зі списку', 'warning');
     return;
   }
 
   emit('save', {
-    dishId,
-    productId,
+    dishId: selectedReplaceDishId.value,
     portionG: replacePortionG.value ? Number(replacePortionG.value) : null,
     portionText: replacePortionText.value.trim() || null,
-    kcalEst: replaceKcalEst.value !== null && replaceKcalEst.value !== undefined && replaceKcalEst.value !== ('' as unknown as number)
-      ? Number(replaceKcalEst.value)
+    kcal: replaceKcal.value !== null && replaceKcal.value !== undefined && replaceKcal.value !== ('' as unknown as number)
+      ? Number(replaceKcal.value)
       : undefined,
   });
 }
@@ -98,11 +81,8 @@ function handleSubmit() {
       <DishProductPicker
         v-model:source-type="replaceSourceType"
         :available-dishes="availableDishes"
-        :available-products="availableProducts"
         :selected-dish-id="selectedReplaceDishId"
-        :selected-product-id="selectedReplaceProductId"
         @select-dish="onSelectReplaceDish"
-        @select-product="onSelectReplaceProduct"
       />
 
       <div class="grid-2">
@@ -131,10 +111,10 @@ function handleSubmit() {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="replaceKcalEst">Оцінка ккал (опційно)</label>
+        <label class="form-label" for="replaceKcal">Оцінка ккал (опційно)</label>
         <input
-          id="replaceKcalEst"
-          v-model.number="replaceKcalEst"
+          id="replaceKcal"
+          v-model.number="replaceKcal"
           type="number"
           class="form-input num-mono"
           placeholder="Напр. 350"
@@ -146,7 +126,7 @@ function handleSubmit() {
         <button
           type="submit"
           class="btn btn-primary btn-full"
-          :disabled="saving || (replaceSourceType === 'dish' ? !selectedReplaceDishId : !selectedReplaceProductId)"
+          :disabled="saving || !selectedReplaceDishId"
         >
           {{ saving ? 'Заміна...' : 'Замінити' }}
         </button>
