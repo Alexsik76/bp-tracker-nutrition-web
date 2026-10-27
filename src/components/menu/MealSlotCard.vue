@@ -1,11 +1,17 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import MenuItemRow from './MenuItemRow.vue';
+import { formatTime24 } from '../../utils/date';
 import type { MenuRead, MenuItemRead, MenuStatus } from '../../types/nutrition';
 
 const props = defineProps<{
   menu: MenuRead;
   generating?: boolean;
+  generatingSlot?: string | null;
+  generationStageText?: string;
   updatingItemId?: string | null;
+  estimatingSlot?: string | null;
+  hasAvailablePin?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -13,15 +19,33 @@ const emit = defineEmits<{
   (e: 'update-status', payload: { menu: MenuRead; status: MenuStatus }): void;
   (e: 'add-item', slot: string): void;
   (e: 'generate-slot', slot: string): void;
+  (e: 'estimate-slot', slot: string): void;
   (e: 'edit-item', item: MenuItemRead): void;
   (e: 'mark-item-eaten', item: MenuItemRead): void;
   (e: 'mark-item-skipped', item: MenuItemRead): void;
   (e: 'unmark-item', item: MenuItemRead): void;
+  (e: 'delete-meal', menu: MenuRead): void;
+  (e: 'restore-pin', slot: string): void;
 }>();
 
 function getSlotKcal(menu: MenuRead): number {
   return menu.items.reduce((sum, item) => sum + (item.kcal_est || 0), 0);
 }
+
+const hasEatenItems = computed(() =>
+  props.menu.status === 'eaten' || props.menu.items.some((item) => item.status === 'eaten')
+);
+
+const deleteMealTooltip = computed(() => {
+  if (hasEatenItems.value) {
+    return props.menu.pinned
+      ? 'Не можна зняти закріплення: у прийомі є зʼїдені позиції (спочатку зніміть позначку «з\'їдено»)'
+      : 'Не можна видалити прийом: у ньому є зʼїдені позиції (спочатку зніміть позначку «з\'їдено»)';
+  }
+  return props.menu.pinned
+    ? `Зняти закріплення з «${props.menu.slot}» на цей день`
+    : `Видалити «${props.menu.slot}»`;
+});
 </script>
 
 <template>
@@ -38,7 +62,40 @@ function getSlotKcal(menu: MenuRead): number {
     <div class="slot-header">
       <div class="slot-title-group">
         <h2 class="slot-title">{{ menu.slot }}</h2>
-        <span class="slot-kcal num-mono">{{ getSlotKcal(menu) }} ккал</span>
+        <span v-if="menu.pinned" class="badge badge-primary slot-pin-badge" title="Закріплений прийом їжі">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="17" x2="12" y2="22"></line>
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+          </svg>
+          <span>Закріплено</span>
+        </span>
+        <button
+          v-if="hasAvailablePin"
+          type="button"
+          class="btn-pin-chip"
+          title="Відновити закріплений прийом"
+          @click="emit('restore-pin', menu.slot)"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="17" x2="12" y2="22"></line>
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+          </svg>
+          <span>Відновити закріплений</span>
+        </button>
+        <span v-if="menu.time" class="slot-time num-mono">{{ formatTime24(menu.time) }}</span>
+        <span v-if="menu.kcal_incomplete" class="slot-kcal slot-kcal-uncalc">не розраховано</span>
+        <span v-else class="slot-kcal num-mono">{{ getSlotKcal(menu) }} ккал</span>
+        <button
+          v-if="menu.kcal_incomplete"
+          type="button"
+          class="btn-estimate"
+          :disabled="Boolean(estimatingSlot)"
+          :title="`Оцінити калорійність для «${menu.slot}»`"
+          @click="emit('estimate-slot', menu.slot)"
+        >
+          <span v-if="estimatingSlot === menu.slot" class="spinner-sm"></span>
+          <span>{{ estimatingSlot === menu.slot ? 'Оцінюємо...' : 'Оцінити' }}</span>
+        </button>
       </div>
 
       <div class="slot-status-group">
@@ -53,6 +110,7 @@ function getSlotKcal(menu: MenuRead): number {
             Пропущено
           </span>
           <button
+            v-if="menu.id"
             type="button"
             class="btn-icon status-edit-btn"
             :title="menu.status === 'eaten' ? 'Скасувати статус «З\'їдено»' : (menu.status === 'partial' ? 'Скасувати позначки для всього прийому' : 'Скасувати статус «Пропущено»')"
@@ -71,6 +129,20 @@ function getSlotKcal(menu: MenuRead): number {
         <span v-else class="badge badge-info">
           Заплановано
         </span>
+
+        <button
+          type="button"
+          class="btn-icon delete-slot-btn"
+          :disabled="hasEatenItems"
+          :title="deleteMealTooltip"
+          :aria-label="deleteMealTooltip"
+          @click="!hasEatenItems && emit('delete-meal', menu)"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -80,6 +152,7 @@ function getSlotKcal(menu: MenuRead): number {
         v-for="item in menu.items"
         :key="item.id"
         :item="item"
+        :can-edit="menu.status !== 'eaten'"
         :updating="updatingItemId === item.id"
         @edit="emit('edit-item', item)"
         @mark-eaten="emit('mark-item-eaten', item)"
@@ -101,9 +174,18 @@ function getSlotKcal(menu: MenuRead): number {
       <div v-else></div>
 
       <div class="slot-buttons">
+        <!-- Regenerating slot indicator -->
+        <div
+          v-if="generatingSlot === menu.slot"
+          class="slot-generating-pill"
+        >
+          <span class="spinner-sm"></span>
+          <span>{{ generationStageText || 'Генеруємо меню…' }}</span>
+        </div>
+
         <!-- Regenerate slot button -->
         <button
-          v-if="menu.status !== 'eaten'"
+          v-else-if="menu.status !== 'eaten'"
           type="button"
           class="btn-icon slot-ctrl-btn"
           :disabled="generating"
@@ -117,11 +199,12 @@ function getSlotKcal(menu: MenuRead): number {
           </svg>
         </button>
 
-        <!-- Cancel whole meal button (when partial, eaten, or skipped) -->
+        <!-- Cancel whole meal button (when partial or eaten) -->
         <button
-          v-if="menu.status === 'eaten' || menu.status === 'partial' || menu.status === 'skipped'"
+          v-if="menu.id && (menu.status === 'eaten' || menu.status === 'partial') && generatingSlot !== menu.slot"
           type="button"
           class="btn-icon slot-ctrl-btn"
+          :disabled="generating"
           @click="emit('prompt-cancel', menu)"
           title="Скасувати позначки для всього прийому"
           aria-label="Скасувати позначки для всього прийому"
@@ -134,27 +217,13 @@ function getSlotKcal(menu: MenuRead): number {
 
         <!-- Whole meal eaten button -->
         <button
-          v-if="menu.status !== 'eaten'"
+          v-if="menu.id && menu.items.length > 0 && menu.status !== 'eaten' && generatingSlot !== menu.slot"
           type="button"
           class="btn btn-primary btn-sm-action"
+          :disabled="generating"
           @click="emit('update-status', { menu, status: 'eaten' })"
         >
           ✓ З'їдено
-        </button>
-
-        <!-- Whole meal skipped button -->
-        <button
-          v-if="menu.status !== 'skipped' && menu.status !== 'eaten'"
-          type="button"
-          class="btn-icon slot-ctrl-btn"
-          @click="emit('update-status', { menu, status: 'skipped' })"
-          title="Пропустити прийом"
-          aria-label="Пропустити прийом"
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 4 15 12 5 20 5 4"></polygon>
-            <line x1="19" y1="5" x2="19" y2="19"></line>
-          </svg>
         </button>
       </div>
     </div>
@@ -195,8 +264,9 @@ function getSlotKcal(menu: MenuRead): number {
 
 .slot-title-group {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-8);
+  flex-wrap: wrap;
 }
 
 .slot-title {
@@ -205,10 +275,89 @@ function getSlotKcal(menu: MenuRead): number {
   color: var(--text-primary);
 }
 
+.slot-pin-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  gap: 4px;
+}
+
+.btn-pin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-bg-chip);
+  border: 1px dashed rgba(129, 140, 248, 0.45);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-pin-chip:hover {
+  background: rgba(129, 140, 248, 0.25);
+  border-color: var(--primary);
+}
+
+.slot-time {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
 .slot-kcal {
   font-size: 13px;
   color: var(--info);
   font-weight: 500;
+}
+
+.slot-kcal-uncalc {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.btn-estimate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-bg-chip);
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-estimate:hover:not(:disabled) {
+  background: rgba(129, 140, 248, 0.25);
+  border-color: var(--primary);
+}
+
+.btn-estimate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner-sm {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .slot-status-group {
@@ -228,6 +377,24 @@ function getSlotKcal(menu: MenuRead): number {
 .status-edit-btn:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.delete-slot-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  color: var(--text-dim);
+  border-radius: var(--radius-pill);
+}
+
+.delete-slot-btn:hover:not(:disabled) {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.delete-slot-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .slot-items {
@@ -278,5 +445,19 @@ function getSlotKcal(menu: MenuRead): number {
   min-height: 44px;
   padding: 0 var(--space-12);
   font-size: 13px;
+}
+
+.slot-generating-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--primary);
+  background: var(--primary-bg-chip);
+  border: 1px solid rgba(129, 140, 248, 0.25);
+  padding: 0 var(--space-12);
+  min-height: 44px;
+  border-radius: var(--radius-control);
 }
 </style>

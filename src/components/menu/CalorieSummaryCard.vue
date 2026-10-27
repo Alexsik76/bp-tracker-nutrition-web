@@ -4,6 +4,7 @@ defineProps<{
   eatenKcal: number;
   eatenSlotsCount: number;
   totalSlotsCount: number;
+  kcalIncomplete?: boolean;
 }>();
 </script>
 
@@ -11,7 +12,8 @@ defineProps<{
   <div class="summary-card card">
     <div class="summary-col">
       <span class="summary-label">Заплановано</span>
-      <span class="summary-val num-mono">{{ totalKcal }} <span class="summary-unit">ккал</span></span>
+      <span v-if="kcalIncomplete" class="summary-val summary-val-uncalc">не розраховано</span>
+      <span v-else class="summary-val num-mono">{{ totalKcal }} <span class="summary-unit">ккал</span></span>
     </div>
     <div class="summary-divider"></div>
     <div class="summary-col">
@@ -53,6 +55,13 @@ defineProps<{
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.summary-val-uncalc {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .val-eaten {

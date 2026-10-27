@@ -42,7 +42,7 @@ watch(
       selectedReplaceProductId.value = null;
       replacePortionG.value = props.item.portion_g;
       replacePortionText.value = props.item.portion_text || '';
-      replaceKcalEst.value = props.item.kcal_est;
+      replaceKcalEst.value = null;
     }
   }
 );
@@ -66,7 +66,7 @@ function onSelectReplaceProduct(prod: ProductRead) {
 }
 
 function handleSubmit() {
-  if (!props.item || props.item.status !== null) return;
+  if (!props.item || props.item.status === 'eaten') return;
   const isDish = replaceSourceType.value === 'dish';
   const dishId = isDish ? (selectedReplaceDishId.value ?? undefined) : undefined;
   const productId = !isDish ? (selectedReplaceProductId.value ?? undefined) : undefined;
@@ -81,7 +81,9 @@ function handleSubmit() {
     productId,
     portionG: replacePortionG.value ? Number(replacePortionG.value) : null,
     portionText: replacePortionText.value.trim() || null,
-    kcalEst: replaceKcalEst.value !== null && replaceKcalEst.value !== undefined ? Number(replaceKcalEst.value) : null,
+    kcalEst: replaceKcalEst.value !== null && replaceKcalEst.value !== undefined && replaceKcalEst.value !== ('' as unknown as number)
+      ? Number(replaceKcalEst.value)
+      : undefined,
   });
 }
 </script>
@@ -144,7 +146,8 @@ function handleSubmit() {
         <button
           type="submit"
           class="btn btn-primary btn-full"
-          :disabled="saving || (replaceSourceType === 'dish' ? !selectedReplaceDishId : !selectedReplaceProductId)"
+          :disabled="saving || (replaceSourceType === 'dish' ? !selectedReplaceDishId : !selectedReplaceProductId) || item?.status === 'eaten'"
+          :title="item?.status === 'eaten' ? 'Спочатку зніміть позначку «з\'їдено»' : undefined"
         >
           {{ saving ? 'Заміна...' : 'Замінити' }}
         </button>

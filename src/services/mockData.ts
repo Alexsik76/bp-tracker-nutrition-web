@@ -1,3 +1,4 @@
+import { ApiError } from './api';
 import type {
   NutritionProfileRead,
   NutritionProfileUpsert,
@@ -10,6 +11,7 @@ import type {
   DishKind,
   MenuRead,
   MenuUpdate,
+  MealCreate,
   MenuItemRead,
   MenuItemCreate,
   MenuItemUpdate,
@@ -20,6 +22,10 @@ import type {
   MenuNoteRead,
   MenuNoteCreate,
   DayMenuRead,
+  PinnedMealRead,
+  PinnedMealUpsert,
+  PinnedMealItemRead,
+  AvailablePin,
 } from '../types/nutrition';
 
 let mockProfile: NutritionProfileRead = {
@@ -139,15 +145,53 @@ let mockDishes: DishRead[] = [
   },
 ];
 
+let mockPinnedMeals: PinnedMealRead[] = [
+  {
+    id: 'pin-1',
+    slot: 'Сніданок',
+    active: true,
+    items: [
+      {
+        id: 'pin-item-1',
+        dish_id: 'dish-2',
+        product_id: null,
+        title: 'Ранкова вівсянка з сиром',
+        portion_g: 250,
+        portion_text: null,
+        kcal_est: 420,
+        position: 0,
+      },
+      {
+        id: 'pin-item-2',
+        dish_id: null,
+        product_id: 'prod-5',
+        title: 'Яблука Голден',
+        portion_g: null,
+        portion_text: '1 шт',
+        kcal_est: 75,
+        position: 1,
+      },
+    ],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+let mockDeletedSlots = new Set<string>();
+let mockUnpinnedDaySlots = new Set<string>();
+
 let mockMenus: MenuRead[] = [
   {
     id: 'menu-1',
     user_id: 'dev-bypass-user',
     date: new Date().toISOString().slice(0, 10),
     slot: 'Сніданок',
+    time: '08:30',
     status: 'eaten',
     eaten_at: new Date().toISOString(),
     regenerations: 0,
+    kcal_incomplete: false,
+    pinned: true,
     items: [
       {
         id: 'item-1',
@@ -158,6 +202,7 @@ let mockMenus: MenuRead[] = [
         portion_g: 250,
         portion_text: null,
         kcal_est: 420,
+        kcal_source: 'model',
         origin: 'generated',
         position: 0,
         status: 'eaten',
@@ -173,6 +218,7 @@ let mockMenus: MenuRead[] = [
         portion_g: null,
         portion_text: '1 шт',
         kcal_est: 75,
+        kcal_source: 'model',
         origin: 'generated',
         position: 1,
         status: 'eaten',
@@ -188,9 +234,12 @@ let mockMenus: MenuRead[] = [
     user_id: 'dev-bypass-user',
     date: new Date().toISOString().slice(0, 10),
     slot: 'Обід',
+    time: '13:30',
     status: 'planned',
     eaten_at: null,
     regenerations: 0,
+    kcal_incomplete: false,
+    pinned: false,
     items: [
       {
         id: 'item-2',
@@ -201,6 +250,7 @@ let mockMenus: MenuRead[] = [
         portion_g: 250,
         portion_text: null,
         kcal_est: 380,
+        kcal_source: 'model',
         origin: 'generated',
         position: 0,
         status: null,
@@ -216,6 +266,7 @@ let mockMenus: MenuRead[] = [
         portion_g: 150,
         portion_text: null,
         kcal_est: 35,
+        kcal_source: 'user',
         origin: 'manual',
         position: 1,
         status: null,
@@ -231,9 +282,12 @@ let mockMenus: MenuRead[] = [
     user_id: 'dev-bypass-user',
     date: new Date().toISOString().slice(0, 10),
     slot: 'Вечеря',
+    time: '19:00',
     status: 'planned',
     eaten_at: null,
     regenerations: 0,
+    kcal_incomplete: false,
+    pinned: false,
     items: [
       {
         id: 'item-4',
@@ -244,6 +298,7 @@ let mockMenus: MenuRead[] = [
         portion_g: null,
         portion_text: '2 шт',
         kcal_est: 190,
+        kcal_source: 'model',
         origin: 'generated',
         position: 0,
         status: null,
@@ -264,6 +319,7 @@ function deriveMenuState(menu: MenuRead): void {
   if (items.length === 0) {
     menu.status = 'planned';
     menu.eaten_at = null;
+    menu.kcal_incomplete = false;
     return;
   }
 
@@ -288,6 +344,27 @@ function deriveMenuState(menu: MenuRead): void {
     .filter((t): t is string => Boolean(t))
     .sort();
   menu.eaten_at = eatenAts.length > 0 ? eatenAts[eatenAts.length - 1] : null;
+
+  menu.kcal_incomplete = items.some(
+    (i) => i.status !== 'skipped' && (i.kcal_est === null || i.kcal_est === undefined)
+  );
+}
+
+function computeCanGenerateDay(menus: MenuRead[]): boolean {
+  if (menus.length === 0) return true;
+  return menus.some((m) => {
+    if (m.status === 'eaten') return false;
+    if (m.pinned) return false;
+    if (m.items.length === 0) return true;
+    return m.items.some((i) => i.status !== 'eaten' && i.status !== 'skipped');
+  });
+}
+
+function computeDayGenerationReplacesManual(menus: MenuRead[]): boolean {
+  return menus.some((m) =>
+    m.status !== 'eaten' &&
+    m.items.some((i) => i.origin === 'manual' && i.status !== 'eaten' && i.status !== 'skipped')
+  );
 }
 
 export const mockNutritionApi = {
@@ -394,56 +471,247 @@ export const mockNutritionApi = {
   },
 
   getDayMenus: async (menuDate: string): Promise<DayMenuRead> => {
-    for (const m of mockMenus) {
+    // 1. Gather persisted menus for this date (excluding deleted ones)
+    const persisted = mockMenus
+      .filter((m) => (m.date === menuDate || !m.date) && !mockDeletedSlots.has(`${menuDate}:${m.slot}`))
+      .map((m) => ({ ...m, date: menuDate }));
+
+    for (const m of persisted) {
       deriveMenuState(m);
     }
+
+    // 2. Project profile schedule meals not yet persisted and not deleted
+    const persistedSlots = new Set(persisted.map((m) => m.slot.toLowerCase()));
+    const projected: MenuRead[] = [];
+
+    for (const pm of mockProfile.meals) {
+      const isDeleted = mockDeletedSlots.has(`${menuDate}:${pm.name}`);
+      const isPersisted = persistedSlots.has(pm.name.toLowerCase());
+      const isUnpinned = mockUnpinnedDaySlots.has(`${menuDate}:${pm.name}`);
+      if (!isDeleted && !isPersisted) {
+        const activePin = !isUnpinned && mockPinnedMeals.find((p) => p.active && p.slot.toLowerCase() === pm.name.toLowerCase());
+        const items: MenuItemRead[] = activePin ? activePin.items.map((pi) => ({
+          id: `item-proj-${pi.id}`,
+          menu_id: `menu-proj-${pm.name}`,
+          dish_id: pi.dish_id,
+          product_id: pi.product_id,
+          title: pi.title,
+          portion_g: pi.portion_g,
+          portion_text: pi.portion_text,
+          kcal_est: pi.kcal_est,
+          kcal_source: pi.kcal_est ? 'user' : null,
+          origin: 'manual',
+          position: pi.position,
+          status: null,
+          eaten_at: null,
+          incomplete: false,
+        })) : [];
+
+        const projectedMenu: MenuRead = {
+          id: null,
+          user_id: 'dev-bypass-user',
+          date: menuDate,
+          slot: pm.name,
+          time: pm.time,
+          status: 'planned',
+          eaten_at: null,
+          regenerations: 0,
+          kcal_incomplete: false,
+          pinned: Boolean(activePin),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          items: items,
+        };
+        deriveMenuState(projectedMenu);
+        projected.push(projectedMenu);
+      }
+    }
+
+    const allMenus = [...persisted, ...projected];
+
+    // Compute available_pins for active pinned meals whose slot is not pinned in this day
+    const availablePins: AvailablePin[] = [];
+    for (const pm of mockPinnedMeals) {
+      if (!pm.active) continue;
+      const matchingMenu = allMenus.find((m) => m.slot.toLowerCase() === pm.slot.toLowerCase());
+      if (!matchingMenu || !matchingMenu.pinned) {
+        availablePins.push({
+          slot: pm.slot,
+          pinned_meal_id: pm.id,
+        });
+      }
+    }
+
+    // GET returns 404 only when the profile has no meals and the day has nothing
+    if (allMenus.length === 0 && mockProfile.meals.length === 0) {
+      throw new ApiError('Not found', 404);
+    }
+
+    // Menus come ordered by time (null last), then slot
+    allMenus.sort((a, b) => {
+      if (a.time && b.time) {
+        const cmp = a.time.localeCompare(b.time);
+        if (cmp !== 0) return cmp;
+      } else if (a.time) {
+        return -1;
+      } else if (b.time) {
+        return 1;
+      }
+      return a.slot.localeCompare(b.slot);
+    });
+
     return {
       date: menuDate,
-      menus: JSON.parse(JSON.stringify(mockMenus.map((m) => ({ ...m, date: menuDate })))),
+      menus: JSON.parse(JSON.stringify(allMenus)),
       notes: JSON.parse(JSON.stringify(mockNotes.filter((n) => n.date === menuDate))),
       off_plan: JSON.parse(JSON.stringify(mockOffPlan.filter((e) => e.date === menuDate))),
+      kcal_incomplete: allMenus.some((m) => m.kcal_incomplete),
+      can_generate_day: computeCanGenerateDay(allMenus),
+      day_generation_replaces_manual: computeDayGenerationReplacesManual(allMenus),
+      available_pins: availablePins,
     };
   },
 
   updateMenu: async (menuId: string, data: MenuUpdate): Promise<MenuRead> => {
     const menu = mockMenus.find((m) => m.id === menuId);
-    if (menu) {
-      const timestamp = data.eaten_at || new Date().toISOString();
-      if (data.status === 'planned') {
-        for (const item of menu.items) {
-          item.status = null;
-          item.eaten_at = null;
-        }
-      } else if (data.status === 'eaten') {
-        for (const item of menu.items) {
-          item.status = 'eaten';
-          item.eaten_at = timestamp;
-        }
-      } else if (data.status === 'skipped') {
-        for (const item of menu.items) {
-          item.status = 'skipped';
-          item.eaten_at = null;
-        }
-      }
-      deriveMenuState(menu);
-      return JSON.parse(JSON.stringify(menu));
+    if (!menu) {
+      throw new ApiError('Menu not found', 404);
     }
-    throw new Error('Menu not found');
+    if (data.status === 'skipped') {
+      throw new ApiError('Whole-meal skip is not supported', 400);
+    }
+    const timestamp = data.eaten_at || new Date().toISOString();
+    if (data.status === 'planned') {
+      for (const item of menu.items) {
+        item.status = null;
+        item.eaten_at = null;
+      }
+    } else if (data.status === 'eaten') {
+      for (const item of menu.items) {
+        item.status = 'eaten';
+        item.eaten_at = timestamp;
+      }
+    }
+    deriveMenuState(menu);
+    return JSON.parse(JSON.stringify(menu));
+  },
+
+  createMeal: async (menuDate: string, data: MealCreate): Promise<MenuRead> => {
+    const slotLower = data.slot.trim().toLowerCase();
+    const existsPersisted = mockMenus.some(
+      (m) => (m.date === menuDate || !m.date) && m.slot.toLowerCase() === slotLower
+    );
+    const existsProjected = !mockDeletedSlots.has(`${menuDate}:${data.slot}`) &&
+      mockProfile.meals.some((pm) => pm.name.toLowerCase() === slotLower);
+
+    if (existsPersisted || existsProjected) {
+      throw new ApiError(`Meal «${data.slot}» already exists`, 409);
+    }
+
+    mockDeletedSlots.delete(`${menuDate}:${data.slot}`);
+    const newMenu: MenuRead = {
+      id: `menu-${Date.now()}`,
+      user_id: 'dev-bypass-user',
+      date: menuDate,
+      slot: data.slot.trim(),
+      time: data.time.trim(),
+      status: 'planned',
+      eaten_at: null,
+      regenerations: 0,
+      kcal_incomplete: false,
+      pinned: false,
+      items: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockMenus.push(newMenu);
+    return JSON.parse(JSON.stringify(newMenu));
+  },
+
+  deleteMeal: async (menuDate: string, slot: string): Promise<void> => {
+    const slotLower = slot.trim().toLowerCase();
+    const existing = mockMenus.find(
+      (m) => (m.date === menuDate || !m.date) && m.slot.toLowerCase() === slotLower
+    );
+
+    if (
+      existing &&
+      (existing.status === 'eaten' || existing.items.some((i) => i.status === 'eaten'))
+    ) {
+      throw new ApiError('Не можна видалити прийом, що містить зʼїдені позиції (спочатку зніміть позначку «з\'їдено»)', 409, {
+        detail: 'Не можна видалити прийом, що містить зʼїдені позиції (спочатку зніміть позначку «з\'їдено»)',
+      });
+    }
+
+    if (existing && existing.pinned) {
+      existing.pinned = false;
+      existing.items = [];
+      mockUnpinnedDaySlots.add(`${menuDate}:${slot}`);
+      deriveMenuState(existing);
+      return;
+    }
+
+    if (!existing) {
+      const isUnpinned = mockUnpinnedDaySlots.has(`${menuDate}:${slot}`);
+      const activePin = !isUnpinned && mockPinnedMeals.find((p) => p.active && p.slot.toLowerCase() === slotLower);
+      if (activePin) {
+        mockUnpinnedDaySlots.add(`${menuDate}:${slot}`);
+        const pmSchedule = mockProfile.meals.find((p) => p.name.toLowerCase() === slotLower);
+        const emptyMenu: MenuRead = {
+          id: `menu-${Date.now()}`,
+          user_id: 'dev-bypass-user',
+          date: menuDate,
+          slot: pmSchedule?.name || slot,
+          time: pmSchedule?.time || null,
+          status: 'planned',
+          eaten_at: null,
+          regenerations: 0,
+          kcal_incomplete: false,
+          pinned: false,
+          items: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        mockMenus.push(emptyMenu);
+        return;
+      }
+    }
+
+    mockDeletedSlots.add(`${menuDate}:${slot}`);
+    mockUnpinnedDaySlots.delete(`${menuDate}:${slot}`);
+    mockMenus = mockMenus.filter(
+      (m) => !(m.date === menuDate && m.slot.toLowerCase() === slotLower) &&
+             !(m.slot.toLowerCase() === slotLower)
+    );
   },
 
   generateMenu: async (menuDate: string, data: GenerationRequest): Promise<GenerationResultRead> => {
     if (data.scope === 'slot' && data.slot) {
       const slotName = data.slot;
-      let slotMenu = mockMenus.find((m) => m.slot === slotName);
-      if (!slotMenu) {
+      let slotMenu: MenuRead;
+      const existing = mockMenus.find((m) => m.slot.toLowerCase() === slotName.toLowerCase());
+      if (
+        existing &&
+        (existing.status === 'eaten' ||
+          (existing.items.length > 0 && existing.items.every((i) => i.status === 'eaten' || i.status === 'skipped')))
+      ) {
+        throw new ApiError(`Прийом «${slotName}» вже повністю завершено або пропущено`, 409);
+      }
+
+      // Simulate two-stage server processing
+      await new Promise((resolve) => setTimeout(resolve, 3200));
+
+      if (!existing) {
         slotMenu = {
           id: `menu-${Date.now()}`,
           user_id: 'dev-bypass-user',
           date: menuDate,
           slot: slotName,
+          time: mockProfile.meals.find((pm) => pm.name === slotName)?.time || null,
           status: 'planned',
           eaten_at: null,
           regenerations: 0,
+          kcal_incomplete: false,
           items: [
             {
               id: `item-${Date.now()}-1`,
@@ -454,6 +722,7 @@ export const mockNutritionApi = {
               portion_g: 250,
               portion_text: null,
               kcal_est: 380,
+              kcal_source: 'model',
               origin: 'generated',
               position: 0,
               status: null,
@@ -469,6 +738,7 @@ export const mockNutritionApi = {
               portion_g: 150,
               portion_text: null,
               kcal_est: 25,
+              kcal_source: 'model',
               origin: 'generated',
               position: 1,
               status: null,
@@ -481,6 +751,10 @@ export const mockNutritionApi = {
         };
         mockMenus.push(slotMenu);
       } else {
+        slotMenu = existing;
+        if (!slotMenu.id) {
+          slotMenu.id = `menu-${Date.now()}`;
+        }
         slotMenu.regenerations += 1;
         const markedItems = slotMenu.items.filter((i) => i.status !== null);
         const newItems: MenuItemRead[] = [
@@ -493,6 +767,7 @@ export const mockNutritionApi = {
             portion_g: 280,
             portion_text: null,
             kcal_est: 410,
+            kcal_source: 'model',
             origin: 'generated',
             position: 0,
             status: null,
@@ -508,6 +783,7 @@ export const mockNutritionApi = {
             portion_g: 120,
             portion_text: null,
             kcal_est: 30,
+            kcal_source: 'model',
             origin: 'generated',
             position: 1,
             status: null,
@@ -519,14 +795,29 @@ export const mockNutritionApi = {
       }
       deriveMenuState(slotMenu);
 
+      const dayResult = await mockNutritionApi.getDayMenus(menuDate);
       return {
-        menus: JSON.parse(JSON.stringify(mockMenus.map((m) => ({ ...m, date: menuDate })))),
+        menus: dayResult.menus,
         rationale: `Окремо згенеровано прийом «${slotName}» з урахуванням цілей харчування.`,
         shopping_list: ['Свіжа зелень', 'Огірки свіжі'],
       };
     }
 
+    const canGen = computeCanGenerateDay(mockMenus);
+    if (!canGen) {
+      throw new ApiError('Усі позиції дня з\'їдено, пропущено або закріплено', 409);
+    }
+
+    // Simulate two-stage server processing
+    await new Promise((resolve) => setTimeout(resolve, 3200));
+
     for (const m of mockMenus) {
+      if (!m.id) {
+        m.id = `menu-${Date.now()}-${m.slot}`;
+      }
+      if (m.pinned) {
+        continue;
+      }
       const markedItems = m.items.filter((i) => i.status !== null);
       if (markedItems.length === m.items.length && m.items.length > 0) {
         continue;
@@ -542,6 +833,7 @@ export const mockNutritionApi = {
           portion_g: 250,
           portion_text: null,
           kcal_est: 350,
+          kcal_source: 'model',
           origin: 'generated',
           position: 0,
           status: null,
@@ -553,34 +845,74 @@ export const mockNutritionApi = {
       deriveMenuState(m);
     }
 
+    const fullDay = await mockNutritionApi.getDayMenus(menuDate);
     return {
-      menus: JSON.parse(JSON.stringify(mockMenus.map((m) => ({ ...m, date: menuDate })))),
+      menus: fullDay.menus,
       rationale: 'Згенеровано з урахуванням залишку риби в холодильнику та обмеження щодо жирів (без жовчного міхура). Білковий обід і легка вечеря.',
       shopping_list: ['Оливкова олія', 'Сир кисломолочний 5%'],
     };
   },
 
+  estimateMenu: async (menuDate: string, slot?: string): Promise<DayMenuRead> => {
+    const targets = slot ? mockMenus.filter((m) => m.slot === slot) : mockMenus;
+    for (const m of targets) {
+      for (const it of m.items) {
+        if (it.status !== 'skipped' && (it.kcal_est === null || it.kcal_est === undefined)) {
+          it.kcal_est = it.portion_g ? Math.round(it.portion_g * 1.5) : 200;
+          it.kcal_source = 'model';
+        }
+      }
+      deriveMenuState(m);
+    }
+    return mockNutritionApi.getDayMenus(menuDate);
+  },
+
   addMenuItem: async (_menuDate: string, slot: string, data: MenuItemCreate): Promise<MenuItemRead> => {
+    const hasKcal = data.kcal_est !== undefined && data.kcal_est !== null;
+    let target = mockMenus.find((m) => (m.date === _menuDate || !m.date) && m.slot === slot);
+    if (target && target.status === 'eaten') {
+      throw new ApiError('Не можна додати позицію до завершеного прийому', 409, {
+        detail: 'Не можна додати позицію до завершеного прийому',
+      });
+    }
+    if (!target) {
+      const pm = mockProfile.meals.find((p) => p.name === slot);
+      target = {
+        id: `menu-${Date.now()}`,
+        user_id: 'dev-bypass-user',
+        date: _menuDate,
+        slot: slot,
+        time: pm?.time || null,
+        status: 'planned',
+        eaten_at: null,
+        regenerations: 0,
+        kcal_incomplete: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        items: [],
+      };
+      mockMenus.push(target);
+      mockDeletedSlots.delete(`${_menuDate}:${slot}`);
+    }
+
     const newItem: MenuItemRead = {
       id: `item-${Date.now()}`,
-      menu_id: `menu-${slot}`,
+      menu_id: target.id || `menu-${slot}`,
       dish_id: data.dish_id || null,
       product_id: data.product_id || null,
       title: data.title || 'Нова страва',
       portion_g: data.portion_g || null,
       portion_text: data.portion_text || null,
-      kcal_est: data.kcal_est || 200,
+      kcal_est: hasKcal ? data.kcal_est! : null,
+      kcal_source: hasKcal ? 'user' : null,
       origin: 'manual',
       position: 99,
       status: null,
       eaten_at: null,
       incomplete: false,
     };
-    const target = mockMenus.find((m) => m.slot === slot);
-    if (target) {
-      target.items.push(newItem);
-      deriveMenuState(target);
-    }
+    target.items.push(newItem);
+    deriveMenuState(target);
     return JSON.parse(JSON.stringify(newItem));
   },
 
@@ -588,6 +920,21 @@ export const mockNutritionApi = {
     for (const m of mockMenus) {
       const it = m.items.find((i) => i.id === itemId);
       if (it) {
+        if (it.status === 'eaten') {
+          const isEditOrReplace =
+            data.dish_id !== undefined ||
+            data.product_id !== undefined ||
+            data.title !== undefined ||
+            data.portion_g !== undefined ||
+            data.portion_text !== undefined ||
+            data.kcal_est !== undefined ||
+            data.position !== undefined;
+          if (isEditOrReplace) {
+            throw new ApiError('Зʼїдену позицію не можна редагувати або замінити (спочатку зніміть позначку «з\'їдено»)', 409, {
+              detail: 'Зʼїдену позицію не можна редагувати або замінити (спочатку зніміть позначку «з\'їдено»)',
+            });
+          }
+        }
         if (data.status !== undefined) {
           it.status = data.status;
           if (data.status === 'eaten') {
@@ -598,6 +945,7 @@ export const mockNutritionApi = {
         } else if (data.eaten_at !== undefined) {
           it.eaten_at = data.eaten_at;
         }
+        const prevRef = `${it.dish_id}:${it.product_id}`;
         if (data.dish_id !== undefined) {
           it.dish_id = data.dish_id;
           if (data.dish_id) {
@@ -620,10 +968,25 @@ export const mockNutritionApi = {
             }
           }
         }
+        const refChanged = `${it.dish_id}:${it.product_id}` !== prevRef;
+        const titleChanged = data.title !== undefined && data.title !== it.title;
+        const portionChanged = (data.portion_g !== undefined && data.portion_g !== it.portion_g) ||
+                               (data.portion_text !== undefined && data.portion_text !== it.portion_text);
+
         if (data.title !== undefined && data.title !== null) it.title = data.title;
         if (data.portion_g !== undefined) it.portion_g = data.portion_g;
         if (data.portion_text !== undefined) it.portion_text = data.portion_text;
-        if (data.kcal_est !== undefined) it.kcal_est = data.kcal_est;
+
+        if (data.kcal_est !== undefined) {
+          it.kcal_est = data.kcal_est;
+          it.kcal_source = data.kcal_est !== null ? 'user' : null;
+        } else if (refChanged || titleChanged || portionChanged) {
+          if (it.kcal_source === 'model') {
+            it.kcal_est = null;
+            it.kcal_source = null;
+          }
+        }
+
         if (data.position !== undefined) it.position = data.position;
         deriveMenuState(m);
         return JSON.parse(JSON.stringify(it));
@@ -634,10 +997,19 @@ export const mockNutritionApi = {
 
   deleteMenuItem: async (itemId: string): Promise<void> => {
     for (const m of mockMenus) {
-      const prevLen = m.items.length;
-      m.items = m.items.filter((i) => i.id !== itemId);
-      if (m.items.length !== prevLen) {
-        deriveMenuState(m);
+      const it = m.items.find((i) => i.id === itemId);
+      if (it) {
+        if (it.status === 'eaten') {
+          throw new ApiError('Зʼїдену позицію не можна видалити (спочатку зніміть позначку «з\'їдено»)', 409, {
+            detail: 'Зʼїдену позицію не можна видалити (спочатку зніміть позначку «з\'їдено»)',
+          });
+        }
+        const prevLen = m.items.length;
+        m.items = m.items.filter((i) => i.id !== itemId);
+        if (m.items.length !== prevLen) {
+          deriveMenuState(m);
+        }
+        return;
       }
     }
   },
@@ -677,5 +1049,137 @@ export const mockNutritionApi = {
     };
     mockNotes.push(note);
     return JSON.parse(JSON.stringify(note));
+  },
+
+  pinMeal: async (menuDate: string, slot: string): Promise<MenuRead> => {
+    const slotLower = slot.trim().toLowerCase();
+    const pinnedMeal = mockPinnedMeals.find((pm) => pm.slot.toLowerCase() === slotLower);
+    if (!pinnedMeal) {
+      throw new ApiError(`Закріплений прийом для «${slot}» не знайдено`, 404);
+    }
+
+    mockDeletedSlots.delete(`${menuDate}:${slot}`);
+    mockUnpinnedDaySlots.delete(`${menuDate}:${slot}`);
+
+    let menu = mockMenus.find(
+      (m) => (m.date === menuDate || !m.date) && m.slot.toLowerCase() === slotLower
+    );
+
+    const pmSchedule = mockProfile.meals.find((p) => p.name.toLowerCase() === slotLower);
+    const time = menu?.time || pmSchedule?.time || null;
+
+    const pinnedItems: MenuItemRead[] = pinnedMeal.items.map((pi, idx) => ({
+      id: `item-${Date.now()}-${idx}`,
+      menu_id: menu?.id || `menu-${slot}`,
+      dish_id: pi.dish_id,
+      product_id: pi.product_id,
+      title: pi.title,
+      portion_g: pi.portion_g,
+      portion_text: pi.portion_text,
+      kcal_est: pi.kcal_est,
+      kcal_source: pi.kcal_est ? 'user' : null,
+      origin: 'manual',
+      position: pi.position,
+      status: null,
+      eaten_at: null,
+      incomplete: false,
+    }));
+
+    if (menu) {
+      menu.pinned = true;
+      const eatenItems = menu.items.filter((i) => i.status === 'eaten');
+      let pos = 0;
+      for (const ei of eatenItems) {
+        ei.position = pos++;
+      }
+      for (const pi of pinnedItems) {
+        pi.position = pos++;
+      }
+      menu.items = [...eatenItems, ...pinnedItems];
+      deriveMenuState(menu);
+    } else {
+      menu = {
+        id: `menu-${Date.now()}`,
+        user_id: 'dev-bypass-user',
+        date: menuDate,
+        slot: slot,
+        time: time,
+        status: 'planned',
+        eaten_at: null,
+        regenerations: 0,
+        kcal_incomplete: false,
+        pinned: true,
+        items: pinnedItems,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      deriveMenuState(menu);
+      mockMenus.push(menu);
+    }
+
+    return JSON.parse(JSON.stringify(menu));
+  },
+
+  getPinnedMeals: async (): Promise<PinnedMealRead[]> => {
+    return JSON.parse(JSON.stringify(mockPinnedMeals));
+  },
+
+  upsertPinnedMeal: async (slot: string, data: PinnedMealUpsert): Promise<PinnedMealRead> => {
+    const slotTrimmed = slot.trim();
+    const inSchedule = mockProfile.meals.some(
+      (m) => m.name.toLowerCase() === slotTrimmed.toLowerCase()
+    );
+    if (!inSchedule) {
+      throw new ApiError(`Прийом «${slot}» відсутній у розкладі профілю`, 400);
+    }
+
+    for (const item of data.items) {
+      if (item.dish_id && item.product_id) {
+        throw new ApiError('Позиція не може одночасно посилатися на страву і продукт', 400);
+      }
+      if (!item.dish_id && !item.product_id && (!item.title || !item.title.trim())) {
+        throw new ApiError('Для вільного запису обовʼязкова назва', 400);
+      }
+    }
+
+    let existing = mockPinnedMeals.find(
+      (pm) => pm.slot.toLowerCase() === slotTrimmed.toLowerCase()
+    );
+
+    const now = new Date().toISOString();
+    const formattedItems: PinnedMealItemRead[] = data.items.map((it, idx) => ({
+      id: `pin-item-${Date.now()}-${idx}`,
+      dish_id: it.dish_id || null,
+      product_id: it.product_id || null,
+      title: it.title?.trim() || (it.dish_id ? (mockDishes.find((d) => d.id === it.dish_id)?.name || 'Страва') : (mockProducts.find((p) => p.id === it.product_id)?.name || 'Продукт')),
+      portion_g: it.portion_g !== undefined ? it.portion_g : null,
+      portion_text: it.portion_text?.trim() || null,
+      kcal_est: it.kcal_est !== undefined ? it.kcal_est : null,
+      position: it.position ?? idx,
+    }));
+
+    if (existing) {
+      existing.active = data.active;
+      existing.items = formattedItems;
+      existing.updated_at = now;
+    } else {
+      existing = {
+        id: `pin-${Date.now()}`,
+        slot: slotTrimmed,
+        active: data.active,
+        items: formattedItems,
+        created_at: now,
+        updated_at: now,
+      };
+      mockPinnedMeals.push(existing);
+    }
+
+    return JSON.parse(JSON.stringify(existing));
+  },
+
+  deletePinnedMeal: async (slot: string): Promise<void> => {
+    mockPinnedMeals = mockPinnedMeals.filter(
+      (pm) => pm.slot.toLowerCase() !== slot.trim().toLowerCase()
+    );
   },
 };

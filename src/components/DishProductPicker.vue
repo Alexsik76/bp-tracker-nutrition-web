@@ -1,20 +1,40 @@
 <script setup lang="ts">
-import SegmentedControl from './SegmentedControl.vue';
+import { computed } from 'vue';
+import SegmentedControl, { type SegmentOption } from './SegmentedControl.vue';
 import type { DishRead, ProductRead } from '../types/nutrition';
 
-const props = defineProps<{
-  sourceType: 'dish' | 'product';
-  availableDishes: DishRead[];
-  availableProducts: ProductRead[];
-  selectedDishId: string | null;
-  selectedProductId: string | null;
-}>();
+export type PickerSourceType = 'dish' | 'product' | 'custom';
+
+const props = withDefaults(
+  defineProps<{
+    sourceType: PickerSourceType;
+    availableDishes: DishRead[];
+    availableProducts: ProductRead[];
+    selectedDishId: string | null;
+    selectedProductId: string | null;
+    allowCustom?: boolean;
+  }>(),
+  {
+    allowCustom: false,
+  }
+);
 
 const emit = defineEmits<{
-  (e: 'update:sourceType', val: 'dish' | 'product'): void;
+  (e: 'update:sourceType', val: PickerSourceType): void;
   (e: 'select-dish', dish: DishRead): void;
   (e: 'select-product', prod: ProductRead): void;
 }>();
+
+const options = computed<SegmentOption<PickerSourceType>[]>(() => {
+  const list: SegmentOption<PickerSourceType>[] = [
+    { label: 'Готова страва', value: 'dish' },
+    { label: 'Продукт', value: 'product' },
+  ];
+  if (props.allowCustom) {
+    list.push({ label: 'Вільний запис', value: 'custom' });
+  }
+  return list;
+});
 </script>
 
 <template>
@@ -23,10 +43,7 @@ const emit = defineEmits<{
       <label class="form-label">Джерело</label>
       <SegmentedControl
         :model-value="props.sourceType"
-        :options="[
-          { label: 'Готова страва', value: 'dish' },
-          { label: 'Продукт', value: 'product' },
-        ]"
+        :options="options"
         @update:model-value="emit('update:sourceType', $event)"
       />
     </div>
@@ -55,7 +72,7 @@ const emit = defineEmits<{
     </div>
 
     <!-- Products picker -->
-    <div v-else class="picker-section">
+    <div v-else-if="props.sourceType === 'product'" class="picker-section">
       <label class="form-label">Оберіть продукт</label>
       <div v-if="props.availableProducts.length === 0" class="picker-empty">
         Немає продуктів у наявності

@@ -96,6 +96,7 @@ export interface MenuItemRead {
   portion_g: number | null;
   portion_text: string | null;
   kcal_est: number | null;
+  kcal_source: 'user' | 'model' | null;
   origin: MenuItemOrigin;
   position: number;
   status: MenuItemStatus | null;
@@ -126,16 +127,24 @@ export interface MenuItemUpdate {
 }
 
 export interface MenuRead {
-  id: string;
+  id: string | null;
   user_id: string;
   date: string; // YYYY-MM-DD
   slot: string; // "Сніданок", "Обід", "Вечеря", etc.
+  time: string | null; // "HH:MM"
   status: MenuStatus;
   eaten_at: string | null;
   regenerations: number;
+  kcal_incomplete: boolean;
+  pinned?: boolean;
   created_at: string;
   updated_at: string;
   items: MenuItemRead[];
+}
+
+export interface MealCreate {
+  slot: string;
+  time: string; // HH:MM
 }
 
 export interface MenuUpdate {
@@ -209,9 +218,53 @@ export interface MenuNoteCreate {
   text: string;
 }
 
+export interface AvailablePin {
+  slot: string;
+  pinned_meal_id: string;
+}
+
 export interface DayMenuRead {
   date: string;
   menus: MenuRead[];
   notes: MenuNoteRead[];
   off_plan: OffPlanEntryRead[];
+  kcal_incomplete: boolean;
+  can_generate_day: boolean;
+  day_generation_replaces_manual: boolean;
+  available_pins?: AvailablePin[];
+}
+
+export interface PinnedMealItemRead {
+  id: string;
+  dish_id: string | null;
+  product_id: string | null;
+  title: string;
+  portion_g: number | null;
+  portion_text: string | null;
+  kcal_est: number | null;
+  position: number;
+}
+
+export interface PinnedMealItemUpsert {
+  dish_id?: string | null;
+  product_id?: string | null;
+  title?: string | null;
+  portion_g?: number | null;
+  portion_text?: string | null;
+  kcal_est?: number | null;
+  position?: number;
+}
+
+export interface PinnedMealRead {
+  id: string;
+  slot: string;
+  active: boolean;
+  items: PinnedMealItemRead[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PinnedMealUpsert {
+  active: boolean;
+  items: PinnedMealItemUpsert[];
 }

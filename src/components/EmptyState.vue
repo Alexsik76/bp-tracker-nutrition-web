@@ -3,6 +3,8 @@ defineProps<{
   title: string;
   description?: string;
   actionLabel?: string;
+  actionDisabled?: boolean;
+  actionTitle?: string;
 }>();
 
 defineEmits<{
@@ -26,6 +28,8 @@ defineEmits<{
     <button
       v-if="actionLabel"
       class="btn btn-primary empty-action"
+      :disabled="actionDisabled"
+      :title="actionTitle"
       @click="$emit('action')"
     >
       {{ actionLabel }}

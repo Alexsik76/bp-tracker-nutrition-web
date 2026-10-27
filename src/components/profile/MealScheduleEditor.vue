@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useToastStore } from '../../stores/toast';
+import { normalizeTime24 } from '../../utils/date';
 import type { MealSchedule } from '../../types/nutrition';
 
 const meals = defineModel<MealSchedule[]>({ required: true });
@@ -46,9 +47,14 @@ function removeMeal(index: number) {
         />
         <input
           v-model="meal.time"
-          type="time"
+          type="text"
           class="form-input meal-time-input num-mono"
+          placeholder="08:30"
+          pattern="^([01]\d|2[0-3]):[0-5]\d$"
+          maxlength="5"
+          title="Час у форматі 24г: ГГ:ХХ (наприклад, 08:30)"
           required
+          @blur="meal.time = normalizeTime24(meal.time)"
         />
         <button
           type="button"

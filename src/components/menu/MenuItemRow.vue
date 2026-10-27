@@ -1,10 +1,17 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { MenuItemRead } from '../../types/nutrition';
 
-defineProps<{
-  item: MenuItemRead;
-  updating?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    item: MenuItemRead;
+    updating?: boolean;
+    canEdit?: boolean;
+  }>(),
+  {
+    canEdit: true,
+  }
+);
 
 const emit = defineEmits<{
   (e: 'edit', item: MenuItemRead): void;
@@ -12,6 +19,18 @@ const emit = defineEmits<{
   (e: 'mark-skipped', item: MenuItemRead): void;
   (e: 'unmark', item: MenuItemRead): void;
 }>();
+
+const isEditable = computed(() => props.canEdit && props.item.status !== 'eaten');
+
+const itemTooltip = computed(() => {
+  if (props.item.status === 'eaten') {
+    return 'Спочатку зніміть позначку «з\'їдено»';
+  }
+  if (isEditable.value) {
+    return 'Натисніть для редагування або заміни';
+  }
+  return undefined;
+});
 </script>
 
 <template>
@@ -25,9 +44,9 @@ const emit = defineEmits<{
   >
     <div
       class="item-info"
-      :class="{ 'item-info-readonly': item.status !== null }"
-      :title="item.status === null ? 'Натисніть для редагування або заміни' : undefined"
-      @click="item.status === null && emit('edit', item)"
+      :class="{ 'item-info-readonly': !isEditable }"
+      :title="itemTooltip"
+      @click="isEditable && emit('edit', item)"
     >
       <div class="item-title-row">
         <span class="item-title">{{ item.title }}</span>
@@ -48,12 +67,19 @@ const emit = defineEmits<{
         <span v-else-if="item.portion_text" class="portion-pill">
           {{ item.portion_text }}
         </span>
-        <span v-if="item.kcal_est" class="num-mono kcal-pill">
-          {{ item.kcal_est }} ккал
+        <span
+          v-if="item.kcal_est !== null && item.kcal_est !== undefined"
+          class="num-mono kcal-pill"
+          :title="item.kcal_source === 'model' ? 'Орієнтовна оцінка моделі, яку можна уточнити' : undefined"
+        >
+          {{ item.kcal_source === 'model' ? '≈ ' : '' }}{{ item.kcal_est }} ккал
         </span>
         <span v-if="item.origin === 'manual'" class="badge badge-neutral manual-badge">
           вручну
         </span>
+      </div>
+      <div v-if="item.status === 'skipped'" class="item-skipped-caption">
+        Генерація більше не створить цю позицію
       </div>
     </div>
 
@@ -230,5 +256,12 @@ const emit = defineEmits<{
 .item-unmark-btn:hover {
   color: var(--warning);
   background: var(--warning-bg-chip);
+}
+
+.item-skipped-caption {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 4px;
+  line-height: 1.3;
 }
 </style>

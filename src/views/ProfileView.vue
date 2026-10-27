@@ -7,6 +7,8 @@ import { useToastStore } from '../stores/toast';
 import SegmentedControl from '../components/SegmentedControl.vue';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 import MealScheduleEditor from '../components/profile/MealScheduleEditor.vue';
+import PinnedMealsSection from '../components/profile/PinnedMealsSection.vue';
+import { normalizeTime24, isValidTime24 } from '../utils/date';
 import type { NutritionProfileUpsert, MealSchedule } from '../types/nutrition';
 
 const router = useRouter();
@@ -61,6 +63,22 @@ async function loadProfile() {
 }
 
 async function saveProfile() {
+  const normalizedMeals = meals.value.map((m) => ({
+    name: m.name.trim(),
+    time: normalizeTime24(m.time),
+  }));
+
+  for (const m of normalizedMeals) {
+    if (!m.name) {
+      toastStore.show('Вкажіть назву для всіх прийомів їжі', 'warning');
+      return;
+    }
+    if (!isValidTime24(m.time)) {
+      toastStore.show(`Вкажіть коректний час у форматі 24г (ГГ:ХХ) для «${m.name}»`, 'warning');
+      return;
+    }
+  }
+
   saving.value = true;
   try {
     const payload: NutritionProfileUpsert = {
@@ -72,10 +90,7 @@ async function saveProfile() {
       pace_kg_per_week: Number(paceKgPerWeek.value),
       restrictions: restrictions.value.trim() || null,
       dislikes: dislikes.value.trim() || null,
-      meals: meals.value.map((m) => ({
-        name: m.name.trim(),
-        time: m.time.trim(),
-      })),
+      meals: normalizedMeals,
     };
 
     await nutritionApi.upsertProfile(payload);
@@ -235,6 +250,9 @@ onMounted(() => {
 
       <!-- Meal Schedule -->
       <MealScheduleEditor v-model="meals" />
+
+      <!-- Pinned Meals -->
+      <PinnedMealsSection :schedule-meals="meals" />
 
       <!-- Save Button -->
       <button

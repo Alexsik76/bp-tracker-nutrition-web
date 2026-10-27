@@ -69,3 +69,49 @@ export function nowLocalIso(): string {
 
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${sign}${offsetHours}:${offsetMins}`;
 }
+
+/**
+ * Formats time string or Date into 24-hour "HH:MM" format.
+ * Guarantees 24-hour format regardless of user locale.
+ */
+export function formatTime24(val?: string | Date | null): string {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    const match = /^([0-1]?[0-9]|2[0-3]):([0-5]?[0-9])$/.exec(trimmed);
+    if (match) {
+      return `${match[1].padStart(2, '0')}:${match[2].padStart(2, '0')}`;
+    }
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      return new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(d);
+    }
+    return trimmed;
+  }
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(val);
+}
+
+/**
+ * Validates whether string is in HH:MM 24-hour format (00:00 to 23:59).
+ */
+export function isValidTime24(val: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(val.trim());
+}
+
+/**
+ * Normalizes input time string like "8:30" or "8:5" into 2-digit "08:30" or "08:05".
+ */
+export function normalizeTime24(val: string): string {
+  const trimmed = val.trim();
+  const match = /^([0-1]?[0-9]|2[0-3]):([0-5]?[0-9])$/.exec(trimmed);
+  if (!match) return trimmed;
+  return `${match[1].padStart(2, '0')}:${match[2].padStart(2, '0')}`;
+}

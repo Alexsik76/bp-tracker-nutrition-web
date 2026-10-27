@@ -17,6 +17,7 @@ import type {
   DishKind,
   MenuRead,
   MenuUpdate,
+  MealCreate,
   MenuItemRead,
   MenuItemCreate,
   MenuItemUpdate,
@@ -29,6 +30,8 @@ import type {
   MenuNoteRead,
   MenuNoteCreate,
   DayMenuRead,
+  PinnedMealRead,
+  PinnedMealUpsert,
 } from '../types/nutrition';
 
 declare global {
@@ -362,10 +365,32 @@ const realNutritionApi = {
     });
   },
 
+  createMeal: async (menuDate: string, data: MealCreate): Promise<MenuRead> => {
+    return request<MenuRead>(`/nutrition/menus/${menuDate}/meals`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteMeal: async (menuDate: string, slot: string): Promise<void> => {
+    return request<void>(`/nutrition/menus/${menuDate}/meals/${encodeURIComponent(slot)}`, {
+      method: 'DELETE',
+    });
+  },
+
   generateMenu: async (menuDate: string, data: GenerationRequest): Promise<GenerationResultRead> => {
     return request<GenerationResultRead>(`/nutrition/menus/${menuDate}/generate`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  estimateMenu: async (menuDate: string, slot?: string): Promise<DayMenuRead> => {
+    const params = new URLSearchParams();
+    if (slot) params.set('slot', slot);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<DayMenuRead>(`/nutrition/menus/${menuDate}/estimate${qs}`, {
+      method: 'POST',
     });
   },
 
@@ -443,6 +468,37 @@ const realNutritionApi = {
       }
       throw err;
     }
+  },
+
+  // Pinned Meals
+  getPinnedMeals: async (): Promise<PinnedMealRead[]> => {
+    try {
+      return await request<PinnedMealRead[]>('/nutrition/pinned-meals');
+    } catch (err) {
+      if (isExpectedEmptyStatus(err)) {
+        return [];
+      }
+      throw err;
+    }
+  },
+
+  upsertPinnedMeal: async (slot: string, data: PinnedMealUpsert): Promise<PinnedMealRead> => {
+    return request<PinnedMealRead>(`/nutrition/pinned-meals/${encodeURIComponent(slot)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deletePinnedMeal: async (slot: string): Promise<void> => {
+    return request<void>(`/nutrition/pinned-meals/${encodeURIComponent(slot)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  pinMeal: async (menuDate: string, slot: string): Promise<MenuRead | void> => {
+    return request<MenuRead | void>(`/nutrition/menus/${menuDate}/meals/${encodeURIComponent(slot)}/pin`, {
+      method: 'POST',
+    });
   },
 };
 

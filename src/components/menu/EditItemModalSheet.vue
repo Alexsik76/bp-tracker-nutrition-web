@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import ModalSheet from '../ModalSheet.vue';
 import type { MenuItemRead } from '../../types/nutrition';
 
-const props = defineProps<{
-  show: boolean;
-  item: MenuItemRead | null;
-  saving: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    show: boolean;
+    item: MenuItemRead | null;
+    saving: boolean;
+    canReplace?: boolean;
+  }>(),
+  {
+    canReplace: true,
+  }
+);
 
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'save', payload: {
+    title?: string;
     portionG?: number | null;
     portionText?: string | null;
     kcalEst?: number | null;
@@ -20,27 +27,42 @@ const emit = defineEmits<{
   (e: 'delete', item: MenuItemRead): void;
 }>();
 
+const title = ref('');
 const portionG = ref<number | null>(null);
 const portionText = ref('');
 const kcalEst = ref<number | null>(null);
+
+const isEaten = computed(() => props.item?.status === 'eaten');
 
 watch(
   () => props.show,
   (isOpen) => {
     if (isOpen && props.item) {
+      title.value = props.item.title;
       portionG.value = props.item.portion_g;
       portionText.value = props.item.portion_text || '';
-      kcalEst.value = props.item.kcal_est;
+      kcalEst.value = props.item.kcal_source === 'user' ? props.item.kcal_est : null;
     }
   }
 );
 
 function handleSubmit() {
-  if (!props.item || props.item.status !== null) return;
+  if (!props.item || isEaten.value) return;
+
+  let kcalPayload: number | null | undefined = undefined;
+  if (kcalEst.value !== null && kcalEst.value !== undefined && kcalEst.value !== ('' as unknown as number)) {
+    kcalPayload = Number(kcalEst.value);
+  } else if (props.item.kcal_source === 'user') {
+    kcalPayload = null;
+  } else {
+    kcalPayload = undefined;
+  }
+
   emit('save', {
+    title: title.value.trim() || undefined,
     portionG: portionG.value ? Number(portionG.value) : null,
     portionText: portionText.value.trim() || null,
-    kcalEst: kcalEst.value !== null && kcalEst.value !== undefined ? Number(kcalEst.value) : null,
+    kcalEst: kcalPayload,
   });
 }
 </script>
@@ -52,6 +74,19 @@ function handleSubmit() {
     @close="emit('close')"
   >
     <form @submit.prevent="handleSubmit" class="edit-item-form">
+      <div class="form-group">
+        <label class="form-label" for="editTitle">Назва страви / продукту</label>
+        <input
+          id="editTitle"
+          v-model="title"
+          type="text"
+          class="form-input"
+          placeholder="Назва"
+          :disabled="isEaten"
+          required
+        />
+      </div>
+
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label" for="editPortionG">Порція (г)</label>
@@ -61,6 +96,7 @@ function handleSubmit() {
             type="number"
             class="form-input num-mono"
             placeholder="г"
+            :disabled="isEaten"
           />
         </div>
 
@@ -72,18 +108,25 @@ function handleSubmit() {
             type="text"
             class="form-input"
             placeholder="1 шт..."
+            :disabled="isEaten"
           />
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="editKcalEst">Калорійність (ккал)</label>
+        <label class="form-label" for="editKcalEst">
+          Калорійність (ккал)
+          <span v-if="item?.kcal_source === 'model'" class="model-hint">
+            (оцінка моделі: ≈{{ item.kcal_est }})
+          </span>
+        </label>
         <input
           id="editKcalEst"
           v-model.number="kcalEst"
           type="number"
           class="form-input num-mono"
-          placeholder="ккал"
+          :placeholder="item?.kcal_source === 'model' ? 'Залиште порожнім для переоцінки' : 'ккал'"
+          :disabled="isEaten"
         />
       </div>
 
@@ -91,15 +134,18 @@ function handleSubmit() {
         <button
           type="submit"
           class="btn btn-primary btn-full"
-          :disabled="saving"
+          :disabled="saving || isEaten"
+          :title="isEaten ? 'Спочатку зніміть позначку «з\'їдено»' : undefined"
         >
-          {{ saving ? 'Збереження...' : 'Зберегти порцію' }}
+          {{ saving ? 'Збереження...' : 'Зберегти зміни' }}
         </button>
         <button
-          v-if="item"
+          v-if="item && canReplace"
           type="button"
           class="btn btn-secondary btn-full"
-          @click="emit('replace', item)"
+          :disabled="isEaten"
+          :title="isEaten ? 'Спочатку зніміть позначку «з\'їдено»' : undefined"
+          @click="!isEaten && emit('replace', item)"
         >
           Замінити позицію...
         </button>
@@ -107,7 +153,9 @@ function handleSubmit() {
           v-if="item"
           type="button"
           class="btn btn-danger btn-full"
-          @click="emit('delete', item)"
+          :disabled="isEaten"
+          :title="isEaten ? 'Спочатку зніміть позначку «з\'їдено»' : undefined"
+          @click="!isEaten && emit('delete', item)"
         >
           Видалити позицію
         </button>
@@ -115,3 +163,13 @@ function handleSubmit() {
     </form>
   </ModalSheet>
 </template>
+
+<style scoped>
+.model-hint {
+  font-weight: 400;
+  color: var(--info);
+  text-transform: none;
+  letter-spacing: normal;
+  margin-left: 4px;
+}
+</style>
