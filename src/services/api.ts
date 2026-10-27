@@ -301,6 +301,12 @@ const realNutritionApi = {
     });
   },
 
+  estimateProduct: async (productId: string): Promise<ProductRead> => {
+    return request<ProductRead>(`/nutrition/products/${productId}/estimate`, {
+      method: 'POST',
+    });
+  },
+
   deleteProduct: async (productId: string): Promise<void> => {
     return request<void>(`/nutrition/products/${productId}`, {
       method: 'DELETE',

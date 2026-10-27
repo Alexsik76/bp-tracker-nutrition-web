@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { nutritionApi } from '../../services/api';
 import type { DishRead, DishKind } from '../../types/nutrition';
 import { mealTypeLabel } from '../../utils/mealTypes';
 
@@ -12,6 +14,21 @@ const emit = defineEmits<{
   (e: 'adjust-remaining', payload: { dish: DishRead; deltaG: number }): void;
   (e: 'mark-finished', dish: DishRead): void;
 }>();
+
+const productsMap = ref<Record<string, string>>({});
+
+onMounted(async () => {
+  try {
+    const prods = await nutritionApi.getProducts();
+    const map: Record<string, string> = {};
+    for (const p of prods) {
+      map[p.id] = p.name;
+    }
+    productsMap.value = map;
+  } catch {
+    // ignore
+  }
+});
 </script>
 
 <template>
@@ -43,6 +60,14 @@ const emit = defineEmits<{
       </button>
     </div>
 
+    <!-- Nutrition section if present -->
+    <div v-if="dish.kcal !== null && dish.kcal !== undefined" class="dish-nutrition num-mono">
+      <span class="dish-kcal">{{ Math.round(dish.kcal) }} ккал</span>
+      <span v-if="dish.protein_g !== null || dish.fat_g !== null || dish.carbs_g !== null" class="dish-macros">
+        · Б: {{ dish.protein_g ?? 0 }} г · Ж: {{ dish.fat_g ?? 0 }} г · В: {{ dish.carbs_g ?? 0 }} г
+      </span>
+    </div>
+
     <!-- Components section if present -->
     <div v-if="dish.components && dish.components.length > 0" class="dish-components">
       <div class="components-label">Складники:</div>
@@ -52,9 +77,9 @@ const emit = defineEmits<{
           :key="c.id"
           class="component-chip"
         >
-          {{ c.name }}
-          <span v-if="c.raw_weight_g || c.cooked_weight_g" class="num-mono comp-weight">
-            ({{ c.cooked_weight_g ?? c.raw_weight_g }} г)
+          {{ productsMap[c.product_id] || 'Продукт' }}
+          <span class="num-mono comp-weight">
+            ({{ c.weight_g }} г)
           </span>
         </span>
       </div>
@@ -145,6 +170,20 @@ const emit = defineEmits<{
 }
 
 .edit-action-btn {
+  color: var(--text-muted);
+}
+
+.dish-nutrition {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.dish-kcal {
+  color: var(--info);
+  font-weight: 600;
+}
+
+.dish-macros {
   color: var(--text-muted);
 }
 

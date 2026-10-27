@@ -21,7 +21,7 @@ const emit = defineEmits<{
     title?: string;
     portionG?: number | null;
     portionText?: string | null;
-    kcalEst?: number | null;
+    kcal?: number | null;
   }): void;
   (e: 'replace', item: MenuItemRead): void;
   (e: 'delete', item: MenuItemRead): void;
@@ -30,7 +30,7 @@ const emit = defineEmits<{
 const title = ref('');
 const portionG = ref<number | null>(null);
 const portionText = ref('');
-const kcalEst = ref<number | null>(null);
+const kcal = ref<number | null>(null);
 
 watch(
   () => props.show,
@@ -39,7 +39,8 @@ watch(
       title.value = props.item.title;
       portionG.value = props.item.portion_g;
       portionText.value = props.item.portion_text || '';
-      kcalEst.value = props.item.kcal_source === 'user' ? props.item.kcal_est : null;
+      const isUser = props.item.nutrition_source === 'user';
+      kcal.value = isUser ? (props.item.kcal ?? null) : null;
     }
   }
 );
@@ -47,10 +48,11 @@ watch(
 function handleSubmit() {
   if (!props.item) return;
 
+  const isUser = props.item.nutrition_source === 'user';
   let kcalPayload: number | null | undefined = undefined;
-  if (kcalEst.value !== null && kcalEst.value !== undefined && kcalEst.value !== ('' as unknown as number)) {
-    kcalPayload = Number(kcalEst.value);
-  } else if (props.item.kcal_source === 'user') {
+  if (kcal.value !== null && kcal.value !== undefined && kcal.value !== ('' as unknown as number)) {
+    kcalPayload = Number(kcal.value);
+  } else if (isUser) {
     kcalPayload = null;
   } else {
     kcalPayload = undefined;
@@ -60,7 +62,7 @@ function handleSubmit() {
     title: title.value.trim() || undefined,
     portionG: portionG.value ? Number(portionG.value) : null,
     portionText: portionText.value.trim() || null,
-    kcalEst: kcalPayload,
+    kcal: kcalPayload,
   });
 }
 </script>
@@ -73,7 +75,7 @@ function handleSubmit() {
   >
     <form @submit.prevent="handleSubmit" class="edit-item-form">
       <div class="form-group">
-        <label class="form-label" for="editTitle">Назва страви / продукту</label>
+        <label class="form-label" for="editTitle">Назва страви</label>
         <input
           id="editTitle"
           v-model="title"
@@ -109,18 +111,18 @@ function handleSubmit() {
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="editKcalEst">
+        <label class="form-label" for="editKcal">
           Калорійність (ккал)
-          <span v-if="item?.kcal_source === 'model'" class="model-hint">
-            (оцінка моделі: ≈{{ item.kcal_est }})
+          <span v-if="item?.nutrition_source === 'model'" class="model-hint">
+            (оцінка моделі: ≈{{ item?.kcal }})
           </span>
         </label>
         <input
-          id="editKcalEst"
-          v-model.number="kcalEst"
+          id="editKcal"
+          v-model.number="kcal"
           type="number"
           class="form-input num-mono"
-          :placeholder="item?.kcal_source === 'model' ? 'Залиште порожнім для переоцінки' : 'ккал'"
+          :placeholder="item?.nutrition_source === 'model' ? 'Залиште порожнім для переоцінки' : 'ккал'"
         />
       </div>
 

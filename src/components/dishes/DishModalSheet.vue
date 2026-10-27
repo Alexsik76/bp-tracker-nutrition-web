@@ -50,9 +50,9 @@ watch(
         formFixedSlot.value = props.dish.fixed_meal_type || '';
         formNotes.value = props.dish.notes || '';
         formComponents.value = (props.dish.components || []).map((c) => ({
-          name: c.name,
-          raw_weight_g: c.raw_weight_g,
-          cooked_weight_g: c.cooked_weight_g,
+          product_id: c.product_id,
+          new_product: null,
+          weight_g: c.weight_g,
         }));
       } else {
         formName.value = '';
@@ -62,7 +62,7 @@ watch(
         formFixedSlot.value = '';
         formNotes.value = '';
         formComponents.value = props.activeKind === 'constant'
-          ? [{ name: '', raw_weight_g: null, cooked_weight_g: null }]
+          ? [{ product_id: null, new_product: null, weight_g: 100 }]
           : [];
       }
     }
@@ -83,21 +83,35 @@ function handleSubmit() {
       toastStore.show('Готова вага має бути > 0 г', 'warning');
       return;
     }
-  } else if (props.activeKind === 'constant') {
-    const validComps = formComponents.value.filter((c) => c.name.trim().length > 0);
-    if (validComps.length === 0) {
-      toastStore.show('Для постійної страви потрібен щонайменше 1 складник', 'warning');
-      return;
-    }
   }
 
-  const cleanedComponents = formComponents.value
-    .filter((c) => c.name.trim().length > 0)
-    .map((c) => ({
-      name: c.name.trim(),
-      raw_weight_g: c.raw_weight_g ? Number(c.raw_weight_g) : null,
-      cooked_weight_g: c.cooked_weight_g ? Number(c.cooked_weight_g) : null,
-    }));
+  const validComps = formComponents.value.filter((c) => {
+    if (c.new_product && c.new_product.name && c.new_product.name.trim().length > 0) {
+      return c.weight_g > 0;
+    }
+    return Boolean(c.product_id) && c.weight_g > 0;
+  });
+
+  if (props.activeKind === 'constant' && validComps.length === 0) {
+    toastStore.show('Для постійної страви потрібен щонайменше 1 складник', 'warning');
+    return;
+  }
+
+  const cleanedComponents: DishComponentCreate[] = validComps.map((c) => {
+    if (c.new_product && c.new_product.name && c.new_product.name.trim().length > 0) {
+      return {
+        new_product: {
+          name: c.new_product.name.trim(),
+          stock_g: c.new_product.stock_g ? Number(c.new_product.stock_g) : null,
+        },
+        weight_g: Number(c.weight_g),
+      };
+    }
+    return {
+      product_id: c.product_id,
+      weight_g: Number(c.weight_g),
+    };
+  });
 
   if (props.dish) {
     const payload: DishUpdate = {
@@ -148,6 +162,13 @@ function handleSubmit() {
           required
           autofocus
         />
+      </div>
+
+      <div v-if="dish && dish.kcal !== null && dish.kcal !== undefined" class="dish-nutrition-summary num-mono">
+        Розрахована цінність: {{ Math.round(dish.kcal) }} ккал
+        <span v-if="dish.protein_g !== null || dish.fat_g !== null || dish.carbs_g !== null">
+          · Б: {{ dish.protein_g ?? 0 }} г · Ж: {{ dish.fat_g ?? 0 }} г · В: {{ dish.carbs_g ?? 0 }} г
+        </span>
       </div>
 
       <!-- Ready fields -->
@@ -236,3 +257,14 @@ function handleSubmit() {
     </form>
   </ModalSheet>
 </template>
+
+<style scoped>
+.dish-nutrition-summary {
+  font-size: 13px;
+  color: var(--info);
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: var(--radius-control);
+  padding: var(--space-8) var(--space-12);
+  margin-bottom: var(--space-12);
+}
+</style>

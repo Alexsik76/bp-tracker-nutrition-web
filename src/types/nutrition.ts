@@ -1,7 +1,17 @@
 export type ProductAvailability = 'in_stock' | 'low' | 'out';
 export type ProductPreference = 'preferred' | 'neutral' | 'avoid';
 
-export interface ProductRead {
+export interface NutritionSet {
+  kcal: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  carbs_g: number | null;
+  fiber_g: number | null;
+  sugar_g: number | null;
+  sodium_mg: number | null;
+}
+
+export interface ProductRead extends NutritionSet {
   id: string;
   user_id: string;
   name: string;
@@ -9,27 +19,29 @@ export interface ProductRead {
   preference: ProductPreference;
   eat_raw: boolean;
   count: number | null;
-  daily_limit_g: number | null;
+  stock_g: number | null;
+  reserved_g: number | null;
+  available_g: number | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface ProductCreate {
+export interface ProductCreate extends Partial<NutritionSet> {
   name: string;
   availability?: ProductAvailability;
   preference?: ProductPreference;
   eat_raw?: boolean;
   count?: number | null;
-  daily_limit_g?: number | null;
+  stock_g?: number | null;
 }
 
-export interface ProductUpdate {
+export interface ProductUpdate extends Partial<NutritionSet> {
   name?: string;
   availability?: ProductAvailability;
   preference?: ProductPreference;
   eat_raw?: boolean;
   count?: number | null;
-  daily_limit_g?: number | null;
+  stock_g?: number | null;
 }
 
 export type MealType =
@@ -42,10 +54,14 @@ export type MealType =
 
 export type DishKind = 'ready' | 'constant';
 
-export interface DishComponentBase {
+export interface NewProductInput {
   name: string;
-  raw_weight_g?: number | null;
-  cooked_weight_g?: number | null;
+  stock_g?: number | null;
+}
+
+export interface DishComponentBase {
+  product_id: string;
+  weight_g: number;
 }
 
 export interface DishComponentRead extends DishComponentBase {
@@ -53,9 +69,13 @@ export interface DishComponentRead extends DishComponentBase {
   dish_id: string;
 }
 
-export interface DishComponentCreate extends DishComponentBase {}
+export interface DishComponentCreate {
+  product_id?: string | null;
+  new_product?: NewProductInput | null;
+  weight_g: number;
+}
 
-export interface DishRead {
+export interface DishRead extends NutritionSet {
   id: string;
   user_id: string;
   name: string;
@@ -93,39 +113,35 @@ export interface DishUpdate {
 
 export type MenuItemOrigin = 'generated' | 'manual';
 export type MenuStatus = 'planned' | 'incomplete' | 'eaten';
+export type NutritionSource = 'user' | 'model' | 'computed';
 
-export interface MenuItemRead {
+export interface MenuItemRead extends NutritionSet {
   id: string;
   menu_id: string;
   dish_id: string | null;
-  product_id: string | null;
   title: string;
   portion_g: number | null;
   portion_text: string | null;
-  kcal_est: number | null;
-  kcal_source: 'user' | 'model' | null;
+  nutrition_source: NutritionSource | null;
   origin: MenuItemOrigin;
   position: number;
   incomplete: boolean;
+  updated_at: string;
 }
 
-export interface MenuItemCreate {
+export interface MenuItemCreate extends Partial<NutritionSet> {
   dish_id?: string | null;
-  product_id?: string | null;
   title?: string | null;
   portion_g?: number | null;
   portion_text?: string | null;
-  kcal_est?: number | null;
   position?: number;
 }
 
-export interface MenuItemUpdate {
+export interface MenuItemUpdate extends Partial<NutritionSet> {
   dish_id?: string | null;
-  product_id?: string | null;
   title?: string | null;
   portion_g?: number | null;
   portion_text?: string | null;
-  kcal_est?: number | null;
   position?: number;
 }
 
@@ -236,24 +252,21 @@ export interface DayMenuRead {
   available_pins?: AvailablePin[];
 }
 
-export interface PinnedMealItemRead {
+export interface PinnedMealItemRead extends NutritionSet {
   id: string;
+  pinned_meal_id: string;
   dish_id: string | null;
-  product_id: string | null;
   title: string;
   portion_g: number | null;
   portion_text: string | null;
-  kcal_est: number | null;
   position: number;
 }
 
-export interface PinnedMealItemUpsert {
+export interface PinnedMealItemUpsert extends Partial<NutritionSet> {
   dish_id?: string | null;
-  product_id?: string | null;
   title?: string | null;
   portion_g?: number | null;
   portion_text?: string | null;
-  kcal_est?: number | null;
   position?: number;
 }
 

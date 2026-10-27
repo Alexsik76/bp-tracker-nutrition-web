@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import SegmentedControl, { type SegmentOption } from './SegmentedControl.vue';
-import type { DishRead, ProductRead } from '../types/nutrition';
+import type { DishRead } from '../types/nutrition';
 
-export type PickerSourceType = 'dish' | 'product' | 'custom';
+export type PickerSourceType = 'dish' | 'custom';
 
 const props = withDefaults(
   defineProps<{
     sourceType: PickerSourceType;
     availableDishes: DishRead[];
-    availableProducts: ProductRead[];
     selectedDishId: string | null;
-    selectedProductId: string | null;
     allowCustom?: boolean;
   }>(),
   {
@@ -22,13 +20,11 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'update:sourceType', val: PickerSourceType): void;
   (e: 'select-dish', dish: DishRead): void;
-  (e: 'select-product', prod: ProductRead): void;
 }>();
 
 const options = computed<SegmentOption<PickerSourceType>[]>(() => {
   const list: SegmentOption<PickerSourceType>[] = [
     { label: 'Готова страва', value: 'dish' },
-    { label: 'Продукт', value: 'product' },
   ];
   if (props.allowCustom) {
     list.push({ label: 'Вільний запис', value: 'custom' });
@@ -39,7 +35,7 @@ const options = computed<SegmentOption<PickerSourceType>[]>(() => {
 
 <template>
   <div class="dish-product-picker">
-    <div class="form-group">
+    <div v-if="props.allowCustom" class="form-group">
       <label class="form-label">Джерело</label>
       <SegmentedControl
         :model-value="props.sourceType"
@@ -66,29 +62,6 @@ const options = computed<SegmentOption<PickerSourceType>[]>(() => {
           <span class="picker-item-name">{{ dish.name }}</span>
           <span class="picker-item-sub num-mono">
             залишок: {{ dish.remaining_g ?? dish.cooked_weight_g }} г
-          </span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Products picker -->
-    <div v-else-if="props.sourceType === 'product'" class="picker-section">
-      <label class="form-label">Оберіть продукт</label>
-      <div v-if="props.availableProducts.length === 0" class="picker-empty">
-        Немає продуктів у наявності
-      </div>
-      <div v-else class="picker-list">
-        <button
-          v-for="prod in props.availableProducts"
-          :key="prod.id"
-          type="button"
-          class="picker-item"
-          :class="{ selected: props.selectedProductId === prod.id }"
-          @click="emit('select-product', prod)"
-        >
-          <span class="picker-item-name">{{ prod.name }}</span>
-          <span v-if="prod.daily_limit_g" class="picker-item-sub num-mono">
-            ліміт: {{ prod.daily_limit_g }}г
           </span>
         </button>
       </div>

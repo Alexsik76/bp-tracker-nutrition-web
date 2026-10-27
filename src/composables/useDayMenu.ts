@@ -103,7 +103,7 @@ export function useDayMenu() {
   // Total stats
   const totalKcal = computed(() => {
     return menus.value.reduce((total, m) => {
-      const slotKcal = m.items.reduce((s, i) => s + (i.kcal_est || 0), 0);
+      const slotKcal = m.items.reduce((s, i) => s + (i.kcal || 0), 0);
       return total + slotKcal;
     }, 0);
   });
@@ -111,7 +111,7 @@ export function useDayMenu() {
   const eatenKcal = computed(() => {
     return menus.value.reduce((total, m) => {
       if (m.status !== 'eaten') return total;
-      const slotKcal = m.items.reduce((s, i) => s + (i.kcal_est || 0), 0);
+      const slotKcal = m.items.reduce((s, i) => s + (i.kcal || 0), 0);
       return total + slotKcal;
     }, 0);
   });
@@ -204,7 +204,7 @@ export function useDayMenu() {
     } catch (err: unknown) {
       console.error('Day generation error:', err);
       if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(err.message, 'warning');
+        toastStore.show(getErrorMessage(err, 'Не вдалося згенерувати меню'), 'warning');
       } else {
         toastStore.show(err instanceof Error ? err.message : 'Помилка генерації меню', 'error');
       }
@@ -230,7 +230,7 @@ export function useDayMenu() {
     } catch (err: unknown) {
       console.error('Slot generation error:', err);
       if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(err.message, 'warning');
+        toastStore.show(getErrorMessage(err, 'Не вдалося згенерувати прийом'), 'warning');
       } else {
         toastStore.show(err instanceof Error ? err.message : 'Помилка генерації прийому', 'error');
       }
@@ -353,20 +353,18 @@ export function useDayMenu() {
 
   async function handleAddMenuItem(slot: MealType, payload: {
     dishId?: string;
-    productId?: string;
     title?: string;
     portionG?: number;
     portionText?: string;
-    kcalEst?: number;
+    kcal?: number;
   }) {
     try {
       await nutritionApi.addMenuItem(currentDate.value, slot, {
         dish_id: payload.dishId,
-        product_id: payload.productId,
         title: payload.title,
         portion_g: payload.portionG,
         portion_text: payload.portionText,
-        kcal_est: payload.kcalEst,
+        kcal: payload.kcal,
       });
       toastStore.show('Позицію додано до прийому', 'success');
       await loadMenu();
@@ -386,7 +384,7 @@ export function useDayMenu() {
     title?: string | null;
     portionG?: number | null;
     portionText?: string | null;
-    kcalEst?: number | null;
+    kcal?: number | null;
   }) {
     const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === itemId));
     if (parentMenu?.status === 'eaten') {
@@ -398,7 +396,7 @@ export function useDayMenu() {
         title: payload.title,
         portion_g: payload.portionG,
         portion_text: payload.portionText,
-        kcal_est: payload.kcalEst,
+        kcal: payload.kcal,
       });
       toastStore.show('Позицію оновлено', 'success');
       await loadMenu();
@@ -431,10 +429,9 @@ export function useDayMenu() {
 
   async function handleReplaceItem(itemId: string, payload: {
     dishId?: string;
-    productId?: string;
     portionG?: number | null;
     portionText?: string | null;
-    kcalEst?: number | null;
+    kcal?: number | null;
   }) {
     const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === itemId));
     if (parentMenu?.status === 'eaten') {
@@ -444,10 +441,9 @@ export function useDayMenu() {
     try {
       const updatePayload: MenuItemUpdate = {
         dish_id: payload.dishId,
-        product_id: payload.productId,
         portion_g: payload.portionG,
         portion_text: payload.portionText,
-        kcal_est: payload.kcalEst,
+        kcal: payload.kcal,
       };
       await nutritionApi.updateMenuItem(itemId, updatePayload);
       toastStore.show('Позицію замінено', 'success');
@@ -536,7 +532,7 @@ export function useDayMenu() {
   }
 
   function getSlotKcal(menu: MenuRead): number {
-    return menu.items.reduce((sum, item) => sum + (item.kcal_est || 0), 0);
+    return menu.items.reduce((sum, item) => sum + (item.kcal || 0), 0);
   }
 
   return {

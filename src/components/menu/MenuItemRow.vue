@@ -51,11 +51,17 @@ const itemTooltip = computed(() => {
           {{ item.portion_text }}
         </span>
         <span
-          v-if="item.kcal_est !== null && item.kcal_est !== undefined"
+          v-if="item.kcal !== null && item.kcal !== undefined"
           class="num-mono kcal-pill"
-          :title="item.kcal_source === 'model' ? 'Орієнтовна оцінка моделі, яку можна уточнити' : undefined"
+          :title="item.nutrition_source === 'model' ? 'Орієнтовна оцінка моделі, яку можна уточнити' : undefined"
         >
-          {{ item.kcal_source === 'model' ? '≈ ' : '' }}{{ item.kcal_est }} ккал
+          {{ item.nutrition_source === 'model' ? '≈ ' : '' }}{{ Math.round(item.kcal) }} ккал
+        </span>
+        <span
+          v-if="item.protein_g !== null || item.fat_g !== null || item.carbs_g !== null"
+          class="num-mono macros-pill"
+        >
+          Б: {{ item.protein_g ?? 0 }} · Ж: {{ item.fat_g ?? 0 }} · В: {{ item.carbs_g ?? 0 }}
         </span>
         <span v-if="item.origin === 'manual'" class="badge badge-neutral manual-badge">
           вручну
@@ -130,6 +136,11 @@ const itemTooltip = computed(() => {
 
 .kcal-pill {
   color: var(--info);
+}
+
+.macros-pill {
+  color: var(--text-muted);
+  font-size: 11.5px;
 }
 
 .manual-badge {

@@ -13,12 +13,12 @@ defineProps<{
     <div class="summary-col">
       <span class="summary-label">Заплановано</span>
       <span v-if="kcalIncomplete" class="summary-val summary-val-uncalc">не розраховано</span>
-      <span v-else class="summary-val num-mono">{{ totalKcal }} <span class="summary-unit">ккал</span></span>
+      <span v-else class="summary-val num-mono">{{ Math.round(totalKcal) }} <span class="summary-unit">ккал</span></span>
     </div>
     <div class="summary-divider"></div>
     <div class="summary-col">
       <span class="summary-label">З'їдено</span>
-      <span class="summary-val num-mono val-eaten">{{ eatenKcal }} <span class="summary-unit">ккал</span></span>
+      <span class="summary-val num-mono val-eaten">{{ Math.round(eatenKcal) }} <span class="summary-unit">ккал</span></span>
     </div>
     <div class="summary-divider"></div>
     <div class="summary-col">

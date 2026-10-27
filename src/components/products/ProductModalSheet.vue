@@ -30,7 +30,7 @@ const formAvailability = ref<ProductAvailability>('in_stock');
 const formPreference = ref<ProductPreference>('neutral');
 const formEatRaw = ref(false);
 const formCount = ref<number | null>(null);
-const formDailyLimitG = ref<number | null>(null);
+const formStockG = ref<number | null>(null);
 
 const availabilityOptions: { label: string; value: ProductAvailability; badgeClass: string }[] = [
   { label: 'Є', value: 'in_stock', badgeClass: 'badge-success' },
@@ -54,14 +54,14 @@ watch(
         formPreference.value = props.product.preference;
         formEatRaw.value = props.product.eat_raw;
         formCount.value = props.product.count;
-        formDailyLimitG.value = props.product.daily_limit_g;
+        formStockG.value = props.product.stock_g;
       } else {
         formName.value = '';
         formAvailability.value = 'in_stock';
         formPreference.value = 'neutral';
         formEatRaw.value = false;
         formCount.value = null;
-        formDailyLimitG.value = null;
+        formStockG.value = null;
       }
     }
   },
@@ -80,7 +80,7 @@ function handleSubmit() {
     preference: formPreference.value,
     eat_raw: formEatRaw.value,
     count: formCount.value,
-    daily_limit_g: formDailyLimitG.value,
+    stock_g: formStockG.value,
   };
 
   emit('save', payload);
@@ -148,16 +148,27 @@ function handleSubmit() {
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="prodLimit">Денний ліміт (г)</label>
+          <label class="form-label" for="prodStock">Запас (г)</label>
           <input
-            id="prodLimit"
-            v-model.number="formDailyLimitG"
+            id="prodStock"
+            v-model.number="formStockG"
             type="number"
             class="form-input num-mono"
-            placeholder="Напр. 30"
+            placeholder="Напр. 500"
             min="0"
           />
         </div>
+      </div>
+
+      <div v-if="product && product.reserved_g" class="stock-status-hint">
+        Доступно: {{ product.available_g ?? ((product.stock_g || 0) - product.reserved_g) }} г (зарезервовано стравами: {{ product.reserved_g }} г)
+      </div>
+
+      <div v-if="product && product.kcal !== null && product.kcal !== undefined" class="nutrition-status-hint num-mono">
+        Оцінка КБЖВ на 100 г: ≈ {{ Math.round(product.kcal) }} ккал
+        <span v-if="product.protein_g !== null || product.fat_g !== null || product.carbs_g !== null">
+          (Б: {{ product.protein_g ?? 0 }} г, Ж: {{ product.fat_g ?? 0 }} г, В: {{ product.carbs_g ?? 0 }} г)
+        </span>
       </div>
 
       <div class="modal-actions-area">
@@ -202,5 +213,23 @@ function handleSubmit() {
   height: 20px;
   accent-color: var(--primary);
   cursor: pointer;
+}
+
+.stock-status-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-control);
+  padding: var(--space-8);
+  margin-bottom: var(--space-12);
+}
+
+.nutrition-status-hint {
+  font-size: 12px;
+  color: var(--info);
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: var(--radius-control);
+  padding: var(--space-8);
+  margin-bottom: var(--space-16);
 }
 </style>
