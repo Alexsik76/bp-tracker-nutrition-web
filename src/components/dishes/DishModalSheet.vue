@@ -4,12 +4,14 @@ import ModalSheet from '../ModalSheet.vue';
 import DishComponentsEditor from './DishComponentsEditor.vue';
 import { useToastStore } from '../../stores/toast';
 import { formatLocalDate } from '../../utils/date';
+import { MEAL_TYPES } from '../../utils/mealTypes';
 import type {
   DishRead,
   DishCreate,
   DishUpdate,
   DishKind,
   DishComponentCreate,
+  MealType,
 } from '../../types/nutrition';
 
 const props = defineProps<{
@@ -27,13 +29,12 @@ const emit = defineEmits<{
 
 const toastStore = useToastStore();
 
-const slotOptions = ['Сніданок', 'Обід', 'Полуденок', 'Вечеря', 'Перекус'];
 
 const formName = ref('');
 const formCookedWeightG = ref<number | null>(null);
 const formRemainingG = ref<number | null>(null);
 const formCookedOn = ref(formatLocalDate());
-const formFixedSlot = ref<string>('');
+const formFixedSlot = ref<MealType | ''>('');
 const formNotes = ref('');
 const formComponents = ref<DishComponentCreate[]>([]);
 
@@ -46,7 +47,7 @@ watch(
         formCookedWeightG.value = props.dish.cooked_weight_g;
         formRemainingG.value = props.dish.remaining_g;
         formCookedOn.value = props.dish.cooked_on || formatLocalDate();
-        formFixedSlot.value = props.dish.fixed_slot || '';
+        formFixedSlot.value = props.dish.fixed_meal_type || '';
         formNotes.value = props.dish.notes || '';
         formComponents.value = (props.dish.components || []).map((c) => ({
           name: c.name,
@@ -106,7 +107,7 @@ function handleSubmit() {
         ? Number(formRemainingG.value)
         : null,
       cooked_on: props.activeKind === 'ready' ? formCookedOn.value : null,
-      fixed_slot: props.activeKind === 'constant' ? (formFixedSlot.value.trim() || null) : null,
+      fixed_meal_type: props.activeKind === 'constant' ? (formFixedSlot.value || null) : null,
       notes: formNotes.value.trim() || null,
       components: cleanedComponents,
     };
@@ -120,7 +121,7 @@ function handleSubmit() {
         ? Number(formRemainingG.value)
         : (formCookedWeightG.value ? Number(formCookedWeightG.value) : null),
       cooked_on: props.activeKind === 'ready' ? formCookedOn.value : null,
-      fixed_slot: props.activeKind === 'constant' ? (formFixedSlot.value.trim() || null) : null,
+      fixed_meal_type: props.activeKind === 'constant' ? (formFixedSlot.value || null) : null,
       notes: formNotes.value.trim() || null,
       components: cleanedComponents,
     };
@@ -195,7 +196,7 @@ function handleSubmit() {
           <label class="form-label" for="dishFixedSlot">Закріплений прийом (опційно)</label>
           <select id="dishFixedSlot" v-model="formFixedSlot" class="form-select">
             <option value="">Не закріплено</option>
-            <option v-for="s in slotOptions" :key="s" :value="s">{{ s }}</option>
+            <option v-for="mt in MEAL_TYPES" :key="mt.value" :value="mt.value">{{ mt.label }}</option>
           </select>
         </div>
       </template>

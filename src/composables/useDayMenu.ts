@@ -17,12 +17,14 @@ import type {
   MenuNoteKind,
   MealSchedule,
   AvailablePin,
+  MealType,
 } from '../types/nutrition';
+import { mealTypeLabel } from '../utils/mealTypes';
 
 const DEFAULT_MEALS: MealSchedule[] = [
-  { name: 'Сніданок', time: '08:30' },
-  { name: 'Обід', time: '13:30' },
-  { name: 'Вечеря', time: '19:00' },
+  { type: 'breakfast', time: '08:30' },
+  { type: 'lunch', time: '13:30' },
+  { type: 'dinner', time: '19:00' },
 ];
 
 function getErrorMessage(err: unknown, fallback: string): string {
@@ -44,7 +46,7 @@ export function useDayMenu() {
   const canGenerateDay = ref(true);
   const dayGenerationReplacesManual = ref(false);
   const generatingDay = ref(false);
-  const generatingSlot = ref<string | null>(null);
+  const generatingSlot = ref<MealType | null>(null);
   const generating = computed(() => generatingDay.value || Boolean(generatingSlot.value));
   const generationStageText = ref<string>('Оцінюємо калорійність…');
   let stageTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,11 +68,11 @@ export function useDayMenu() {
   }
 
   const dayKcalIncomplete = ref(false);
-  const estimatingSlot = ref<string | null>(null);
+  const estimatingSlot = ref<MealType | null>(null);
   const availablePins = ref<AvailablePin[]>([]);
 
   const profileMeals = ref<MealSchedule[]>([...DEFAULT_MEALS]);
-  const profileSlots = computed(() => profileMeals.value.map((m) => m.name));
+  const profileSlots = computed(() => profileMeals.value.map((m) => m.type));
 
   // Generation result extras
   const rationale = ref<string>('');
@@ -213,17 +215,17 @@ export function useDayMenu() {
   }
 
   // Generate or Regenerate Single Slot
-  async function handleGenerateSlot(slotName: string) {
+  async function handleGenerateSlot(slotName: MealType) {
     generatingSlot.value = slotName;
     startGenerationStages();
     try {
       const result = await nutritionApi.generateMenu(currentDate.value, {
         scope: 'slot',
-        slot: slotName,
+        meal_type: slotName,
       });
       if (result.rationale) rationale.value = result.rationale;
       if (result.shopping_list) shoppingList.value = result.shopping_list;
-      toastStore.show(`Прийом «${slotName}» успішно згенеровано!`, 'success');
+      toastStore.show(`Прийом «${mealTypeLabel(slotName)}» успішно згенеровано!`, 'success');
       await loadMenu();
     } catch (err: unknown) {
       console.error('Slot generation error:', err);
@@ -248,9 +250,9 @@ export function useDayMenu() {
         eaten_at: nextEatenAt,
       });
       if (nextEatenAt) {
-        toastStore.show(`«${menu.slot}» позначено як з'їдено`, 'success');
+        toastStore.show(`«${mealTypeLabel(menu.meal_type)}» позначено як з'їдено`, 'success');
       } else {
-        toastStore.show(`«${menu.slot}»: статус скасовано`, 'info');
+        toastStore.show(`«${mealTypeLabel(menu.meal_type)}»: статус скасовано`, 'info');
       }
       await loadMenu();
     } catch (err: unknown) {
@@ -270,16 +272,16 @@ export function useDayMenu() {
       return;
     }
     const confirmMessage = menu.pinned
-      ? `Видалити «${menu.slot}» з цього дня? Прийом стане звичайним для цієї дати.`
-      : `Видалити «${menu.slot}» з цього дня?`;
+      ? `Видалити «${mealTypeLabel(menu.meal_type)}» з цього дня? Прийом стане звичайним для цієї дати.`
+      : `Видалити «${mealTypeLabel(menu.meal_type)}» з цього дня?`;
 
     if (!confirm(confirmMessage)) {
       return;
     }
     try {
-      await nutritionApi.deleteMeal(currentDate.value, menu.slot);
+      await nutritionApi.deleteMeal(currentDate.value, menu.meal_type);
       toastStore.show(
-        menu.pinned ? `«${menu.slot}»: закріплення знято на цей день` : `Прийом «${menu.slot}» видалено`,
+        menu.pinned ? `«${mealTypeLabel(menu.meal_type)}»: закріплення знято на цей день` : `Прийом «${mealTypeLabel(menu.meal_type)}» видалено`,
         'info'
       );
       await loadMenu();
@@ -294,10 +296,10 @@ export function useDayMenu() {
   }
 
   // Restore pinned meal back into this day
-  async function handlePinMeal(slot: string) {
+  async function handlePinMeal(slot: MealType) {
     try {
       await nutritionApi.pinMeal(currentDate.value, slot);
-      toastStore.show(`Закріплений прийом «${slot}» відновлено`, 'success');
+      toastStore.show(`Закріплений прийом «${mealTypeLabel(slot)}» відновлено`, 'success');
       await loadMenu();
     } catch (err: unknown) {
       console.error('Error restoring pinned meal:', err);
@@ -313,13 +315,13 @@ export function useDayMenu() {
   async function handleCreateMeal(payload: MealCreate): Promise<boolean> {
     try {
       await nutritionApi.createMeal(currentDate.value, payload);
-      toastStore.show(`Прийом «${payload.slot}» успішно додано`, 'success');
+      toastStore.show(`Прийом «${mealTypeLabel(payload.meal_type)}» успішно додано`, 'success');
       await loadMenu();
       return true;
     } catch (err: unknown) {
       console.error('Error creating meal:', err);
       if (err instanceof ApiError && err.status === 409) {
-        toastStore.show(`Прийом «${payload.slot}» вже є на цей день`, 'warning');
+        toastStore.show(`Прийом «${mealTypeLabel(payload.meal_type)}» вже є на цей день`, 'warning');
       } else {
         toastStore.show(err instanceof Error ? err.message : 'Помилка додавання прийому', 'error');
       }
@@ -349,7 +351,7 @@ export function useDayMenu() {
     }
   }
 
-  async function handleAddMenuItem(slot: string, payload: {
+  async function handleAddMenuItem(slot: MealType, payload: {
     dishId?: string;
     productId?: string;
     title?: string;
@@ -412,12 +414,12 @@ export function useDayMenu() {
     }
   }
 
-  async function handleEstimateSlot(slot: string) {
+  async function handleEstimateSlot(slot: MealType) {
     if (estimatingSlot.value) return;
     estimatingSlot.value = slot;
     try {
       await nutritionApi.estimateMenu(currentDate.value, slot);
-      toastStore.show(`Калорійність для «${slot}» оцінено`, 'success');
+      toastStore.show(`Калорійність для «${mealTypeLabel(slot)}» оцінено`, 'success');
       await loadMenu();
     } catch (err: unknown) {
       console.error('Estimate error:', err);

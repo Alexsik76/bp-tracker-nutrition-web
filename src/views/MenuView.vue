@@ -15,7 +15,8 @@ import AddItemModalSheet from '../components/menu/AddItemModalSheet.vue';
 import EditItemModalSheet from '../components/menu/EditItemModalSheet.vue';
 import ReplaceItemModalSheet from '../components/menu/ReplaceItemModalSheet.vue';
 import OffPlanModalSheet from '../components/menu/OffPlanModalSheet.vue';
-import type { MenuItemRead } from '../types/nutrition';
+import type { MenuItemRead, MealType } from '../types/nutrition';
+import { mealTypeLabel } from '../utils/mealTypes';
 
 const {
   currentDate,
@@ -68,8 +69,8 @@ const {
 } = useInventory();
 
 const unmatchedAvailablePins = computed(() => {
-  const existingSlots = new Set(menus.value.map((m) => m.slot.toLowerCase()));
-  return availablePins.value.filter((p) => !existingSlots.has(p.slot.toLowerCase()));
+  const existingSlots = new Set(menus.value.map((m) => m.meal_type));
+  return availablePins.value.filter((p) => !existingSlots.has(p.meal_type));
 });
 
 // Modal: Add meal slot
@@ -80,7 +81,7 @@ function openAddMealModal() {
   isAddMealModalOpen.value = true;
 }
 
-async function handleSaveNewMeal(payload: { slot: string; time: string }) {
+async function handleSaveNewMeal(payload: { meal_type: MealType; time: string }) {
   savingMeal.value = true;
   try {
     const ok = await handleCreateMeal(payload);
@@ -94,7 +95,7 @@ async function handleSaveNewMeal(payload: { slot: string; time: string }) {
 
 // Modal: Add item to slot
 const isAddItemModalOpen = ref(false);
-const activeSlotForAdd = ref<string | null>(null);
+const activeSlotForAdd = ref<MealType | null>(null);
 const addingItem = ref(false);
 
 // Modal: Edit item portion
@@ -110,7 +111,7 @@ const savingReplaceItem = ref(false);
 // Modal: Off-plan entry
 const isOffPlanModalOpen = ref(false);
 
-async function openAddItemModal(slot: string) {
+async function openAddItemModal(slot: MealType) {
   activeSlotForAdd.value = slot;
   isAddItemModalOpen.value = true;
   await loadInventory();
@@ -266,17 +267,17 @@ onMounted(() => {
         <div class="available-pins-chips">
           <button
             v-for="pin in unmatchedAvailablePins"
-            :key="pin.slot"
+            :key="pin.meal_type"
             type="button"
             class="btn-pin-chip"
-            :title="`Відновити закріплений прийом «${pin.slot}»`"
-            @click="handlePinMeal(pin.slot)"
+            :title="`Відновити закріплений прийом «${mealTypeLabel(pin.meal_type)}»`"
+            @click="handlePinMeal(pin.meal_type)"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="17" x2="12" y2="22"></line>
               <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
             </svg>
-            <span>+ Відновити «{{ pin.slot }}»</span>
+            <span>+ Відновити «{{ mealTypeLabel(pin.meal_type) }}»</span>
           </button>
         </div>
       </div>
@@ -300,7 +301,7 @@ onMounted(() => {
             @click="handleGenerateSlot(s)"
           >
             <span v-if="generatingSlot === s" class="spinner-sm"></span>
-            <span>{{ generatingSlot === s ? generationStageText : `+ ${s}` }}</span>
+            <span>{{ generatingSlot === s ? generationStageText : `+ ${mealTypeLabel(s)}` }}</span>
           </button>
         </div>
       </div>
@@ -310,13 +311,13 @@ onMounted(() => {
     <div v-else class="menu-slots-list">
       <MealSlotCard
         v-for="menu in menus"
-        :key="menu.id ?? menu.slot"
+        :key="menu.id ?? menu.meal_type"
         :menu="menu"
         :generating="generating"
         :generating-slot="generatingSlot"
         :generation-stage-text="generationStageText"
         :estimating-slot="estimatingSlot"
-        :has-available-pin="availablePins.some(p => p.slot.toLowerCase() === menu.slot.toLowerCase())"
+        :has-available-pin="availablePins.some(p => p.meal_type === menu.meal_type)"
         @toggle-eaten="handleToggleMealEaten"
         @add-item="openAddItemModal"
         @generate-slot="handleGenerateSlot"
@@ -341,17 +342,17 @@ onMounted(() => {
         <div class="available-pins-chips">
           <button
             v-for="pin in unmatchedAvailablePins"
-            :key="pin.slot"
+            :key="pin.meal_type"
             type="button"
             class="btn-pin-chip"
-            :title="`Відновити закріплений прийом «${pin.slot}»`"
-            @click="handlePinMeal(pin.slot)"
+            :title="`Відновити закріплений прийом «${mealTypeLabel(pin.meal_type)}»`"
+            @click="handlePinMeal(pin.meal_type)"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="17" x2="12" y2="22"></line>
               <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
             </svg>
-            <span>+ Відновити «{{ pin.slot }}»</span>
+            <span>+ Відновити «{{ mealTypeLabel(pin.meal_type) }}»</span>
           </button>
         </div>
       </div>
@@ -441,7 +442,7 @@ onMounted(() => {
       :show="isAddMealModalOpen"
       :saving="savingMeal"
       :schedule-meals="profileMeals"
-      :existing-slots="menus.map((m) => m.slot)"
+      :existing-slots="menus.map((m) => m.meal_type)"
       @close="isAddMealModalOpen = false"
       @save="handleSaveNewMeal"
     />

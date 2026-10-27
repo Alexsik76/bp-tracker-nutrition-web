@@ -32,6 +32,14 @@ export interface ProductUpdate {
   daily_limit_g?: number | null;
 }
 
+export type MealType =
+  | 'breakfast'
+  | 'lunch'
+  | 'dinner'
+  | 'morning_snack'
+  | 'afternoon_snack'
+  | 'evening_snack';
+
 export type DishKind = 'ready' | 'constant';
 
 export interface DishComponentBase {
@@ -55,7 +63,7 @@ export interface DishRead {
   cooked_weight_g: number | null;
   remaining_g: number | null;
   cooked_on: string | null;
-  fixed_slot: string | null;
+  fixed_meal_type: MealType | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -68,7 +76,7 @@ export interface DishCreate {
   cooked_weight_g?: number | null;
   remaining_g?: number | null;
   cooked_on?: string | null;
-  fixed_slot?: string | null;
+  fixed_meal_type?: MealType | null;
   notes?: string | null;
   components?: DishComponentCreate[];
 }
@@ -78,7 +86,7 @@ export interface DishUpdate {
   cooked_weight_g?: number | null;
   remaining_g?: number | null;
   cooked_on?: string | null;
-  fixed_slot?: string | null;
+  fixed_meal_type?: MealType | null;
   notes?: string | null;
   components?: DishComponentCreate[];
 }
@@ -125,7 +133,7 @@ export interface MenuRead {
   id: string | null;
   user_id: string;
   date: string; // YYYY-MM-DD
-  slot: string; // "Сніданок", "Обід", "Вечеря", etc.
+  meal_type: MealType;
   time: string | null; // "HH:MM"
   status: MenuStatus;
   eaten_at: string | null;
@@ -138,7 +146,7 @@ export interface MenuRead {
 }
 
 export interface MealCreate {
-  slot: string;
+  meal_type: MealType;
   time: string; // HH:MM
 }
 
@@ -148,7 +156,7 @@ export interface MenuUpdate {
 
 export interface GenerationRequest {
   scope: 'day' | 'slot';
-  slot?: string | null;
+  meal_type?: MealType | null;
 }
 
 export interface GenerationResultRead {
@@ -158,7 +166,7 @@ export interface GenerationResultRead {
 }
 
 export interface MealSchedule {
-  name: string;
+  type: MealType;
   time: string; // HH:MM
 }
 
@@ -213,7 +221,7 @@ export interface MenuNoteCreate {
 }
 
 export interface AvailablePin {
-  slot: string;
+  meal_type: MealType;
   pinned_meal_id: string;
 }
 
@@ -251,7 +259,7 @@ export interface PinnedMealItemUpsert {
 
 export interface PinnedMealRead {
   id: string;
-  slot: string;
+  meal_type: MealType;
   active: boolean;
   items: PinnedMealItemRead[];
   created_at: string;

@@ -10,6 +10,7 @@ import MealScheduleEditor from '../components/profile/MealScheduleEditor.vue';
 import PinnedMealsSection from '../components/profile/PinnedMealsSection.vue';
 import { normalizeTime24, isValidTime24 } from '../utils/date';
 import type { NutritionProfileUpsert, MealSchedule } from '../types/nutrition';
+import { mealTypeLabel } from '../utils/mealTypes';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -27,9 +28,9 @@ const paceKgPerWeek = ref<number>(0.75);
 const restrictions = ref<string>('');
 const dislikes = ref<string>('');
 const meals = ref<MealSchedule[]>([
-  { name: 'Сніданок', time: '08:30' },
-  { name: 'Обід', time: '13:30' },
-  { name: 'Вечеря', time: '19:00' },
+  { type: 'breakfast', time: '08:30' },
+  { type: 'lunch', time: '13:30' },
+  { type: 'dinner', time: '19:00' },
 ]);
 
 const sexOptions = [
@@ -64,17 +65,22 @@ async function loadProfile() {
 
 async function saveProfile() {
   const normalizedMeals = meals.value.map((m) => ({
-    name: m.name.trim(),
+    type: m.type,
     time: normalizeTime24(m.time),
   }));
 
+  if (new Set(normalizedMeals.map((m) => m.type)).size !== normalizedMeals.length) {
+    toastStore.show('Кожен тип прийому може бути в розкладі лише один раз', 'warning');
+    return;
+  }
+
   for (const m of normalizedMeals) {
-    if (!m.name) {
-      toastStore.show('Вкажіть назву для всіх прийомів їжі', 'warning');
+    if (!m.type) {
+      toastStore.show('Оберіть тип для всіх прийомів їжі', 'warning');
       return;
     }
     if (!isValidTime24(m.time)) {
-      toastStore.show(`Вкажіть коректний час у форматі 24г (ГГ:ХХ) для «${m.name}»`, 'warning');
+      toastStore.show(`Вкажіть коректний час у форматі 24г (ГГ:ХХ) для «${mealTypeLabel(m.type)}»`, 'warning');
       return;
     }
   }
