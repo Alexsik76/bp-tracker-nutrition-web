@@ -1,6 +1,7 @@
 import { ref, computed, watch } from 'vue';
 import { nutritionApi, ApiError } from '../services/api';
 import { useToastStore } from '../stores/toast';
+import { notifyStockWarnings } from '../utils/stockWarnings';
 import {
   formatLocalDate,
   addDays,
@@ -141,6 +142,7 @@ export function useDayMenu() {
     try {
       const res = await nutritionApi.getDayMenus(currentDate.value);
       if (res) {
+        notifyStockWarnings(res.stock_warnings);
         menus.value = res.menus || [];
         dayKcalIncomplete.value = res.kcal_incomplete !== undefined
           ? res.kcal_incomplete

@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { nutritionApi, ApiError } from '../../services/api';
-import { useInventory } from '../../composables/useInventory';
 import { useToastStore } from '../../stores/toast';
 import { formatTime24 } from '../../utils/date';
-import AddItemModalSheet from '../menu/AddItemModalSheet.vue';
-import EditItemModalSheet from '../menu/EditItemModalSheet.vue';
+import ModalSheet from '../ModalSheet.vue';
 import type {
   MealSchedule,
   PinnedMealRead,
   PinnedMealItemRead,
   PinnedMealItemUpsert,
-  MenuItemRead,
+  FrequentDishRead,
   MealType,
 } from '../../types/nutrition';
 import { mealTypeLabel } from '../../utils/mealTypes';
@@ -21,268 +19,191 @@ const props = defineProps<{
 }>();
 
 const toastStore = useToastStore();
-const {
-  availableDishes,
-  loadInventory,
-} = useInventory();
 
 const pinnedMeals = ref<PinnedMealRead[]>([]);
+const frequentDishes = ref<FrequentDishRead[]>([]);
 const loading = ref(true);
 const savingSlot = ref<MealType | null>(null);
 
-// Add item modal sheet state
-const isAddModalOpen = ref(false);
-const activeSlotForAdd = ref<MealType | null>(null);
-const addingItem = ref(false);
+// Modal state for picking frequent dishes
+const isPickerOpen = ref(false);
+const activeSlotForPicker = ref<MealType | null>(null);
+const selectedFrequentDishIds = ref<string[]>([]);
+const savingPicker = ref(false);
 
-// Edit item modal sheet state
-const isEditModalOpen = ref(false);
-const activeSlotForEdit = ref<MealType | null>(null);
-const editingPinItem = ref<PinnedMealItemRead | null>(null);
-const savingEditItem = ref(false);
-
-// Proxy MenuItemRead for EditItemModalSheet
-const editingItemProxy = computed<MenuItemRead | null>(() => {
-  if (!editingPinItem.value) return null;
-  return {
-    id: editingPinItem.value.id,
-    menu_id: 'pinned',
-    dish_id: editingPinItem.value.dish_id,
-    title: editingPinItem.value.title,
-    portion_g: editingPinItem.value.portion_g,
-    portion_text: editingPinItem.value.portion_text,
-    kcal: editingPinItem.value.kcal ?? null,
-    protein_g: editingPinItem.value.protein_g ?? null,
-    fat_g: editingPinItem.value.fat_g ?? null,
-    carbs_g: editingPinItem.value.carbs_g ?? null,
-    fiber_g: editingPinItem.value.fiber_g ?? null,
-    sugar_g: editingPinItem.value.sugar_g ?? null,
-    sodium_mg: editingPinItem.value.sodium_mg ?? null,
-    nutrition_source: 'user',
-    origin: 'manual',
-    position: editingPinItem.value.position,
-    incomplete: false,
-    updated_at: new Date().toISOString(),
-  };
+const frequentDishesMap = computed(() => {
+  const map = new Map<string, FrequentDishRead>();
+  for (const fd of frequentDishes.value) {
+    map.set(fd.id, fd);
+  }
+  return map;
 });
 
 function getPinnedMeal(slotName: MealType): PinnedMealRead | undefined {
-  return pinnedMeals.value.find(
-    (p) => p.meal_type === slotName
-  );
+  return pinnedMeals.value.find((p) => p.meal_type === slotName);
 }
 
 function calculateSlotKcal(items: PinnedMealItemRead[]): number {
-  return items.reduce((sum, item) => sum + (item.kcal || 0), 0);
+  return items.reduce((sum, item) => {
+    const fd = frequentDishesMap.value.get(item.frequent_dish_id);
+    if (!fd || fd.kcal === null || fd.kcal === undefined) return sum;
+    return sum + Math.round((fd.kcal * fd.cooked_weight_g) / 100);
+  }, 0);
 }
 
-async function loadPinned() {
+async function loadData() {
   loading.value = true;
   try {
-    pinnedMeals.value = await nutritionApi.getPinnedMeals();
+    const [pins, fds] = await Promise.all([
+      nutritionApi.getPinnedMeals(),
+      nutritionApi.getFrequentDishes(),
+    ]);
+    pinnedMeals.value = pins;
+    frequentDishes.value = fds;
   } catch (err) {
-    console.error('Error loading pinned meals:', err);
+    console.error('Error loading pinned meals data:', err);
     toastStore.show('Помилка завантаження закріплених прийомів', 'error');
   } finally {
     loading.value = false;
   }
 }
 
-async function openAddItem(slotName: MealType) {
-  activeSlotForAdd.value = slotName;
-  isAddModalOpen.value = true;
-  await loadInventory();
+function openPicker(slotName: MealType) {
+  activeSlotForPicker.value = slotName;
+  selectedFrequentDishIds.value = [];
+  isPickerOpen.value = true;
 }
 
-async function handleSaveNewItem(payload: {
-  dishId?: string;
-  title?: string;
-  portionG?: number;
-  portionText?: string;
-  kcal?: number;
-}) {
-  if (!activeSlotForAdd.value) return;
+function toggleFrequentDishSelection(id: string) {
+  const idx = selectedFrequentDishIds.value.indexOf(id);
+  if (idx >= 0) {
+    selectedFrequentDishIds.value.splice(idx, 1);
+  } else {
+    selectedFrequentDishIds.value.push(id);
+  }
+}
 
-  const slotName = activeSlotForAdd.value;
-  addingItem.value = true;
+async function handleSavePickedDishes() {
+  if (!activeSlotForPicker.value) return;
+  if (selectedFrequentDishIds.value.length === 0) {
+    toastStore.show('Оберіть хоча б одну часту страву', 'warning');
+    return;
+  }
+
+  const slotName = activeSlotForPicker.value;
+  savingPicker.value = true;
 
   try {
     const existing = getPinnedMeal(slotName);
     const existingItems: PinnedMealItemUpsert[] = (existing?.items || []).map((it, idx) => ({
-      dish_id: it.dish_id,
-      title: it.title,
-      portion_g: it.portion_g,
-      portion_text: it.portion_text,
-      kcal: it.kcal ?? null,
-      protein_g: it.protein_g ?? null,
-      fat_g: it.fat_g ?? null,
-      carbs_g: it.carbs_g ?? null,
-      fiber_g: it.fiber_g ?? null,
-      sugar_g: it.sugar_g ?? null,
-      sodium_mg: it.sodium_mg ?? null,
+      frequent_dish_id: it.frequent_dish_id,
       position: it.position ?? idx,
     }));
 
-    const newItem: PinnedMealItemUpsert = {
-      dish_id: payload.dishId || null,
-      title: payload.title || null,
-      portion_g: payload.portionG !== undefined ? payload.portionG : null,
-      portion_text: payload.portionText || null,
-      kcal: payload.kcal !== undefined ? payload.kcal : null,
-      position: existingItems.length,
-    };
+    const newItems: PinnedMealItemUpsert[] = selectedFrequentDishIds.value.map((fdId, idx) => ({
+      frequent_dish_id: fdId,
+      position: existingItems.length + idx,
+    }));
+
+    const allItems = [...existingItems, ...newItems];
 
     const updated = await nutritionApi.upsertPinnedMeal(slotName, {
       active: existing ? existing.active : true,
-      items: [...existingItems, newItem],
+      items: allItems,
     });
 
-    // Update in-memory list
-    const idx = pinnedMeals.value.findIndex(
-      (p) => p.meal_type === slotName
-    );
+    const idx = pinnedMeals.value.findIndex((p) => p.meal_type === slotName);
     if (idx !== -1) {
       pinnedMeals.value[idx] = updated;
     } else {
       pinnedMeals.value.push(updated);
     }
 
-    toastStore.show(`Позицію додано до «${mealTypeLabel(slotName)}»`, 'success');
-    isAddModalOpen.value = false;
+    toastStore.show(`Страви додано до «${mealTypeLabel(slotName)}»`, 'success');
+    isPickerOpen.value = false;
   } catch (err: unknown) {
-    console.error('Error adding pinned item:', err);
+    console.error('Error adding pinned items:', err);
     if (err instanceof ApiError && err.status === 400) {
       toastStore.show(err.message || 'Спочатку збережіть розклад прийомів у профілі', 'warning');
     } else {
-      toastStore.show(err instanceof Error ? err.message : 'Помилка додавання позиції', 'error');
+      toastStore.show(err instanceof Error ? err.message : 'Помилка додавання', 'error');
     }
   } finally {
-    addingItem.value = false;
+    savingPicker.value = false;
   }
 }
 
-function openEditItem(slotName: MealType, item: PinnedMealItemRead) {
-  activeSlotForEdit.value = slotName;
-  editingPinItem.value = item;
-  isEditModalOpen.value = true;
-}
-
-async function handleSaveItemEdit(payload: {
-  title?: string;
-  portionG?: number | null;
-  portionText?: string | null;
-  kcal?: number | null;
-}) {
-  if (!activeSlotForEdit.value || !editingPinItem.value) return;
-
-  const slotName = activeSlotForEdit.value;
-  const itemId = editingPinItem.value.id;
-  savingEditItem.value = true;
-
-  try {
-    const existing = getPinnedMeal(slotName);
-    if (!existing) return;
-
-    const updatedItems: PinnedMealItemUpsert[] = existing.items.map((it, idx) => {
-      if (it.id === itemId) {
-        const kcalVal = payload.kcal !== undefined ? payload.kcal : (it.kcal ?? null);
-        return {
-          dish_id: it.dish_id,
-          title: payload.title !== undefined ? payload.title : it.title,
-          portion_g: payload.portionG !== undefined ? payload.portionG : it.portion_g,
-          portion_text: payload.portionText !== undefined ? payload.portionText : it.portion_text,
-          kcal: kcalVal,
-          protein_g: it.protein_g ?? null,
-          fat_g: it.fat_g ?? null,
-          carbs_g: it.carbs_g ?? null,
-          fiber_g: it.fiber_g ?? null,
-          sugar_g: it.sugar_g ?? null,
-          sodium_mg: it.sodium_mg ?? null,
-          position: it.position ?? idx,
-        };
-      }
-      return {
-        dish_id: it.dish_id,
-        title: it.title,
-        portion_g: it.portion_g,
-        portion_text: it.portion_text,
-        kcal: it.kcal ?? null,
-        protein_g: it.protein_g ?? null,
-        fat_g: it.fat_g ?? null,
-        carbs_g: it.carbs_g ?? null,
-        fiber_g: it.fiber_g ?? null,
-        sugar_g: it.sugar_g ?? null,
-        sodium_mg: it.sodium_mg ?? null,
-        position: it.position ?? idx,
-      };
-    });
-
-    const updated = await nutritionApi.upsertPinnedMeal(slotName, {
-      active: existing.active,
-      items: updatedItems,
-    });
-
-    const idx = pinnedMeals.value.findIndex(
-      (p) => p.meal_type === slotName
-    );
-    if (idx !== -1) {
-      pinnedMeals.value[idx] = updated;
-    }
-
-    toastStore.show('Позицію оновлено', 'success');
-    isEditModalOpen.value = false;
-  } catch (err: unknown) {
-    console.error('Error saving item edit:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення позиції', 'error');
-  } finally {
-    savingEditItem.value = false;
-  }
-}
-
-async function handleDeleteItemFromEdit(item: MenuItemRead) {
-  if (!activeSlotForEdit.value) return;
-  await quickDeleteItem(activeSlotForEdit.value, item.id);
-  isEditModalOpen.value = false;
-}
-
-async function quickDeleteItem(slotName: MealType, itemId: string) {
+async function moveItem(slotName: MealType, index: number, delta: number) {
   const existing = getPinnedMeal(slotName);
   if (!existing) return;
 
-  try {
-    const remainingItems: PinnedMealItemUpsert[] = existing.items
-      .filter((it) => it.id !== itemId)
-      .map((it, idx) => ({
-        dish_id: it.dish_id,
-        title: it.title,
-        portion_g: it.portion_g,
-        portion_text: it.portion_text,
-        kcal: it.kcal ?? null,
-        protein_g: it.protein_g ?? null,
-        fat_g: it.fat_g ?? null,
-        carbs_g: it.carbs_g ?? null,
-        fiber_g: it.fiber_g ?? null,
-        sugar_g: it.sugar_g ?? null,
-        sodium_mg: it.sodium_mg ?? null,
-        position: idx,
-      }));
+  const targetIndex = index + delta;
+  if (targetIndex < 0 || targetIndex >= existing.items.length) return;
 
+  const itemsCopy = [...existing.items];
+  const [removed] = itemsCopy.splice(index, 1);
+  itemsCopy.splice(targetIndex, 0, removed);
+
+  const reordered: PinnedMealItemUpsert[] = itemsCopy.map((it, idx) => ({
+    frequent_dish_id: it.frequent_dish_id,
+    position: idx,
+  }));
+
+  savingSlot.value = slotName;
+  try {
     const updated = await nutritionApi.upsertPinnedMeal(slotName, {
       active: existing.active,
-      items: remainingItems,
+      items: reordered,
     });
 
-    const idx = pinnedMeals.value.findIndex(
-      (p) => p.meal_type === slotName
-    );
+    const idx = pinnedMeals.value.findIndex((p) => p.meal_type === slotName);
     if (idx !== -1) {
       pinnedMeals.value[idx] = updated;
     }
-
-    toastStore.show('Позицію видалено', 'info');
+    toastStore.show('Порядок страв оновлено', 'info');
   } catch (err: unknown) {
-    console.error('Error deleting pinned item:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка видалення позиції', 'error');
+    console.error('Error reordering items:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення порядку', 'error');
+  } finally {
+    savingSlot.value = null;
+  }
+}
+
+async function removeItem(slotName: MealType, itemId: string) {
+  const existing = getPinnedMeal(slotName);
+  if (!existing) return;
+
+  if (existing.items.length <= 1) {
+    if (confirm(`Видалити закріплений прийом «${mealTypeLabel(slotName)}»?`)) {
+      await handleDeletePinnedMeal(slotName);
+    }
+    return;
+  }
+
+  const remaining: PinnedMealItemUpsert[] = existing.items
+    .filter((it) => it.id !== itemId)
+    .map((it, idx) => ({
+      frequent_dish_id: it.frequent_dish_id,
+      position: idx,
+    }));
+
+  savingSlot.value = slotName;
+  try {
+    const updated = await nutritionApi.upsertPinnedMeal(slotName, {
+      active: existing.active,
+      items: remaining,
+    });
+
+    const idx = pinnedMeals.value.findIndex((p) => p.meal_type === slotName);
+    if (idx !== -1) {
+      pinnedMeals.value[idx] = updated;
+    }
+    toastStore.show('Страву вилучено з прийому', 'info');
+  } catch (err: unknown) {
+    console.error('Error removing item:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка вилучення страви', 'error');
+  } finally {
+    savingSlot.value = null;
   }
 }
 
@@ -295,17 +216,7 @@ async function toggleActive(slotName: MealType) {
 
   try {
     const items: PinnedMealItemUpsert[] = existing.items.map((it, idx) => ({
-      dish_id: it.dish_id,
-      title: it.title,
-      portion_g: it.portion_g,
-      portion_text: it.portion_text,
-      kcal: it.kcal ?? null,
-      protein_g: it.protein_g ?? null,
-      fat_g: it.fat_g ?? null,
-      carbs_g: it.carbs_g ?? null,
-      fiber_g: it.fiber_g ?? null,
-      sugar_g: it.sugar_g ?? null,
-      sodium_mg: it.sodium_mg ?? null,
+      frequent_dish_id: it.frequent_dish_id,
       position: it.position ?? idx,
     }));
 
@@ -314,36 +225,30 @@ async function toggleActive(slotName: MealType) {
       items,
     });
 
-    const idx = pinnedMeals.value.findIndex(
-      (p) => p.meal_type === slotName
-    );
+    const idx = pinnedMeals.value.findIndex((p) => p.meal_type === slotName);
     if (idx !== -1) {
       pinnedMeals.value[idx] = updated;
     }
 
     toastStore.show(
-      nextActive ? `«${mealTypeLabel(slotName)}»: закріплення увімкнено` : `«${mealTypeLabel(slotName)}»: закріплення вимкнено`,
+      nextActive
+        ? `«${mealTypeLabel(slotName)}»: закріплення увімкнено`
+        : `«${mealTypeLabel(slotName)}»: закріплення вимкнено`,
       'info'
     );
   } catch (err: unknown) {
     console.error('Error toggling pinned meal active:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка збереження статусу', 'error');
+    toastStore.show(err instanceof Error ? err.message : 'Помилка зміни статусу', 'error');
   } finally {
     savingSlot.value = null;
   }
 }
 
 async function handleDeletePinnedMeal(slotName: MealType) {
-  if (!confirm(`Видалити закріплений прийом для «${mealTypeLabel(slotName)}»?`)) {
-    return;
-  }
-
   savingSlot.value = slotName;
   try {
     await nutritionApi.deletePinnedMeal(slotName);
-    pinnedMeals.value = pinnedMeals.value.filter(
-      (p) => p.meal_type !== slotName
-    );
+    pinnedMeals.value = pinnedMeals.value.filter((p) => p.meal_type !== slotName);
     toastStore.show(`Закріплений прийом «${mealTypeLabel(slotName)}» видалено`, 'info');
   } catch (err: unknown) {
     console.error('Error deleting pinned meal:', err);
@@ -354,7 +259,7 @@ async function handleDeletePinnedMeal(slotName: MealType) {
 }
 
 onMounted(() => {
-  loadPinned();
+  loadData();
 });
 </script>
 
@@ -362,9 +267,9 @@ onMounted(() => {
   <div class="card pinned-meals-card">
     <div class="section-header">
       <div class="section-title-wrapper">
-        <span>Закріплені прийоми</span>
+        <span class="section-title">Закріплені прийоми</span>
         <span class="section-subtitle">
-          Постійні щоденні прийоми їжі (закріплені меню). Автоматично підставляються на кожен день та не перезаписуються ШІ.
+          Постійні щоденні прийоми їжі з частих страв. Автоматично підставляються на кожен день та не перезаписуються ШІ.
         </span>
       </div>
     </div>
@@ -440,54 +345,68 @@ onMounted(() => {
 
           <div v-else class="pinned-items-list">
             <div
-              v-for="item in getPinnedMeal(sm.type)!.items"
+              v-for="(item, idx) in getPinnedMeal(sm.type)!.items"
               :key="item.id"
               class="pinned-item-row"
-              @click="openEditItem(sm.type, item)"
             >
               <div class="pinned-item-info">
-                <span class="pinned-item-title">{{ item.title }}</span>
-                <div class="pinned-item-meta">
-                  <span v-if="item.portion_g" class="num-mono portion-pill">
-                    {{ item.portion_g }} г
-                  </span>
-                  <span v-else-if="item.portion_text" class="portion-pill">
-                    {{ item.portion_text }}
-                  </span>
-                  <span
-                    v-if="item.kcal !== null && item.kcal !== undefined"
-                    class="num-mono kcal-pill"
-                  >
-                    {{ Math.round(item.kcal) }} ккал
-                  </span>
-                  <span
-                    v-if="item.protein_g !== null || item.fat_g !== null || item.carbs_g !== null"
-                    class="num-mono macros-pill"
-                  >
-                    Б: {{ item.protein_g ?? 0 }} · Ж: {{ item.fat_g ?? 0 }} · В: {{ item.carbs_g ?? 0 }}
-                  </span>
+                <span class="pinned-item-title">
+                  {{ frequentDishesMap.get(item.frequent_dish_id)?.recipe_name || 'Часта страва' }}
+                </span>
+                <div class="pinned-item-meta num-mono">
+                  <template v-if="frequentDishesMap.get(item.frequent_dish_id)">
+                    <span class="portion-pill">
+                      {{ frequentDishesMap.get(item.frequent_dish_id)!.cooked_weight_g }} г
+                    </span>
+                    <span
+                      v-if="frequentDishesMap.get(item.frequent_dish_id)!.kcal !== null"
+                      class="kcal-pill"
+                    >
+                      ≈ {{ Math.round((frequentDishesMap.get(item.frequent_dish_id)!.kcal! * frequentDishesMap.get(item.frequent_dish_id)!.cooked_weight_g) / 100) }} ккал
+                    </span>
+                    <span class="macros-pill">
+                      Б: {{ frequentDishesMap.get(item.frequent_dish_id)!.protein_g ?? 0 }} ·
+                      Ж: {{ frequentDishesMap.get(item.frequent_dish_id)!.fat_g ?? 0 }} ·
+                      В: {{ frequentDishesMap.get(item.frequent_dish_id)!.carbs_g ?? 0 }}
+                    </span>
+                  </template>
                 </div>
               </div>
 
+              <!-- Reorder and Delete Actions -->
               <div class="pinned-item-actions">
                 <button
                   type="button"
-                  class="btn-icon-sm edit-pin-item-btn"
-                  title="Редагувати позицію"
-                  @click.stop="openEditItem(sm.type, item)"
+                  class="btn-icon-sm"
+                  title="Вгору"
+                  :disabled="idx === 0 || savingSlot === sm.type"
+                  @click="moveItem(sm.type, idx, -1)"
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 20h9"></path>
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="18 15 12 9 6 15"></polyline>
                   </svg>
                 </button>
+
                 <button
                   type="button"
-                  class="btn-icon-sm delete-pin-item-btn"
-                  title="Видалити позицію"
-                  @click.stop="quickDeleteItem(sm.type, item.id)"
+                  class="btn-icon-sm"
+                  title="Вниз"
+                  :disabled="idx === getPinnedMeal(sm.type)!.items.length - 1 || savingSlot === sm.type"
+                  @click="moveItem(sm.type, idx, 1)"
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  class="btn-icon-sm delete-item-btn"
+                  title="Вилучити"
+                  :disabled="savingSlot === sm.type"
+                  @click="removeItem(sm.type, item.id)"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>
@@ -499,9 +418,9 @@ onMounted(() => {
           <button
             type="button"
             class="btn btn-secondary btn-full add-pinned-item-btn"
-            @click="openAddItem(sm.type)"
+            @click="openPicker(sm.type)"
           >
-            + Додати страву або продукт
+            + Додати часту страву
           </button>
         </div>
 
@@ -511,7 +430,7 @@ onMounted(() => {
           <button
             type="button"
             class="btn btn-secondary btn-sm compose-pin-btn"
-            @click="openAddItem(sm.type)"
+            @click="openPicker(sm.type)"
           >
             + Скласти постійний прийом
           </button>
@@ -519,27 +438,63 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Modal: Add item to pinned meal -->
-    <AddItemModalSheet
-      :show="isAddModalOpen"
-      :slot-name="activeSlotForAdd"
-      :available-dishes="availableDishes"
-      :adding="addingItem"
-      submit-label="Додати до прийому"
-      @close="isAddModalOpen = false"
-      @save="handleSaveNewItem"
-    />
+    <!-- Modal Sheet: Pick Frequent Dishes -->
+    <ModalSheet
+      :show="isPickerOpen"
+      :title="`Оберіть часті страви: ${activeSlotForPicker ? mealTypeLabel(activeSlotForPicker) : ''}`"
+      @close="isPickerOpen = false"
+    >
+      <div class="frequent-picker-content">
+        <div v-if="frequentDishes.length === 0" class="empty-picker">
+          <p>Немає створених частих страв.</p>
+          <p class="empty-picker-hint">
+            Створіть або збережіть страву як часту у розділі «Страви», щоб закріпити її у щоденному розкладі.
+          </p>
+        </div>
 
-    <!-- Modal: Edit item in pinned meal -->
-    <EditItemModalSheet
-      :show="isEditModalOpen"
-      :item="editingItemProxy"
-      :saving="savingEditItem"
-      :can-replace="false"
-      @close="isEditModalOpen = false"
-      @save="handleSaveItemEdit"
-      @delete="handleDeleteItemFromEdit"
-    />
+        <div v-else class="frequent-dishes-picker-list">
+          <div
+            v-for="fd in frequentDishes"
+            :key="fd.id"
+            class="picker-dish-card"
+            :class="{ selected: selectedFrequentDishIds.includes(fd.id) }"
+            @click="toggleFrequentDishSelection(fd.id)"
+          >
+            <div class="picker-dish-checkbox">
+              <input
+                type="checkbox"
+                class="form-checkbox"
+                :checked="selectedFrequentDishIds.includes(fd.id)"
+                @click.stop="toggleFrequentDishSelection(fd.id)"
+              />
+            </div>
+            <div class="picker-dish-info">
+              <div class="picker-dish-name">{{ fd.recipe_name }}</div>
+              <div class="picker-dish-meta num-mono">
+                <span>{{ fd.cooked_weight_g }} г</span>
+                <span v-if="fd.kcal !== null" class="kcal-pill">
+                  · ≈ {{ Math.round((fd.kcal * fd.cooked_weight_g) / 100) }} ккал
+                </span>
+                <span v-if="fd.protein_g !== null" class="macros-pill">
+                  · Б: {{ fd.protein_g }} г · Ж: {{ fd.fat_g }} г · В: {{ fd.carbs_g }} г
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="picker-actions">
+          <button
+            type="button"
+            class="btn btn-primary btn-full"
+            :disabled="savingPicker || selectedFrequentDishIds.length === 0"
+            @click="handleSavePickedDishes"
+          >
+            {{ savingPicker ? 'Додаємо...' : `Додати обрані (${selectedFrequentDishIds.length})` }}
+          </button>
+        </div>
+      </div>
+    </ModalSheet>
   </div>
 </template>
 
@@ -556,12 +511,16 @@ onMounted(() => {
   gap: 4px;
 }
 
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 .section-subtitle {
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 400;
-  text-transform: none;
-  letter-spacing: normal;
   line-height: 1.4;
 }
 
@@ -623,7 +582,7 @@ onMounted(() => {
 .pinned-slot-kcal {
   font-size: 12px;
   color: var(--info);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .pinned-slot-actions {
@@ -661,8 +620,8 @@ onMounted(() => {
 }
 
 .delete-pin-btn {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 34px;
+  min-height: 34px;
   color: var(--text-dim);
   border-radius: var(--radius-pill);
 }
@@ -701,13 +660,6 @@ onMounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: var(--radius-control);
   gap: var(--space-8);
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.pinned-item-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .pinned-item-info {
@@ -754,8 +706,8 @@ onMounted(() => {
 }
 
 .btn-icon-sm {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -767,12 +719,17 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
-.btn-icon-sm:hover {
+.btn-icon-sm:hover:not(:disabled) {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.08);
 }
 
-.delete-pin-item-btn:hover {
+.btn-icon-sm:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.delete-item-btn:hover:not(:disabled) {
   color: var(--danger);
   background: var(--danger-bg-chip);
 }
@@ -805,23 +762,69 @@ onMounted(() => {
 }
 
 .compose-pin-btn {
-  min-height: 36px;
   font-size: 12.5px;
-  padding: 0 var(--space-12);
+  font-weight: 600;
 }
 
-.spinner-sm {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+/* Modal Picker styles */
+.frequent-picker-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.empty-picker {
+  text-align: center;
+  padding: var(--space-20) 0;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.empty-picker-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: var(--space-8);
+}
+
+.frequent-dishes-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.picker-dish-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-10) var(--space-12);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.picker-dish-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.picker-dish-card.selected {
+  background: var(--primary-bg-chip);
+  border-color: var(--primary);
+}
+
+.picker-dish-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.picker-dish-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 </style>

@@ -149,7 +149,7 @@ function handleSubmit() {
             @change="onLinkedReferenceChange"
           >
             <option value="">Без прив'язки</option>
-            <optgroup v-if="availableDishes.length > 0" label="Готові страви">
+            <optgroup v-if="availableDishes.length > 0" label="Страви з холодильника">
               <option
                 v-for="dish in availableDishes"
                 :key="dish.id"

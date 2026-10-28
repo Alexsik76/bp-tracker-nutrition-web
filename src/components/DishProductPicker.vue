@@ -24,7 +24,7 @@ const emit = defineEmits<{
 
 const options = computed<SegmentOption<PickerSourceType>[]>(() => {
   const list: SegmentOption<PickerSourceType>[] = [
-    { label: 'Готова страва', value: 'dish' },
+    { label: 'Страва', value: 'dish' },
   ];
   if (props.allowCustom) {
     list.push({ label: 'Вільний запис', value: 'custom' });
@@ -48,7 +48,7 @@ const options = computed<SegmentOption<PickerSourceType>[]>(() => {
     <div v-if="props.sourceType === 'dish'" class="picker-section">
       <label class="form-label">Оберіть страву з холодильника</label>
       <div v-if="props.availableDishes.length === 0" class="picker-empty">
-        Немає готових страв у наявності
+        Немає страв у наявності
       </div>
       <div v-else class="picker-list">
         <button

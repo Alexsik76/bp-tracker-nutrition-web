@@ -61,7 +61,7 @@ function switchToExisting(comp: DishComponentCreate) {
     </div>
 
     <div v-if="components.length === 0" class="no-comps-hint">
-      Складників немає (для постійної страви потрібен щонайменше один)
+      Складників ще не додано
     </div>
 
     <div
@@ -81,7 +81,7 @@ function switchToExisting(comp: DishComponentCreate) {
               <option :value="null" disabled>-- Оберіть продукт --</option>
               <option v-for="p in products" :key="p.id" :value="p.id">
                 {{ p.name }}
-                <template v-if="p.stock_g !== null"> (запас: {{ p.available_g ?? p.stock_g }} г)</template>
+                <template v-if="p.stock_g !== null"> (запас: {{ p.stock_g }} г)</template>
               </option>
             </select>
             <button
