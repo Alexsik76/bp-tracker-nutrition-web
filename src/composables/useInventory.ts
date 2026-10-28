@@ -11,7 +11,7 @@ export function useInventory() {
     loadingInventory.value = true;
     try {
       const [dishes, prods] = await Promise.all([
-        nutritionApi.getDishes(undefined, true),
+        nutritionApi.getDishes(true),
         nutritionApi.getProducts(),
       ]);
       availableDishes.value = dishes;

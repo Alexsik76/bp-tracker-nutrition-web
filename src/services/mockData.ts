@@ -5,10 +5,16 @@ import type {
   ProductRead,
   ProductCreate,
   ProductUpdate,
+  RecipeRead,
+  RecipeCreate,
+  RecipeUpdate,
+  FrequentDishRead,
+  FrequentDishCreate,
+  FrequentDishUpdate,
+  FrequentDishCookRequest,
   DishRead,
   DishCreate,
   DishUpdate,
-  DishKind,
   MenuRead,
   MenuUpdate,
   MealCreate,
@@ -58,8 +64,6 @@ let mockProducts: ProductRead[] = [
     eat_raw: false,
     count: 10,
     stock_g: 500,
-    reserved_g: 0,
-    available_g: 500,
     kcal: 143,
     protein_g: 12.6,
     fat_g: 9.5,
@@ -79,8 +83,6 @@ let mockProducts: ProductRead[] = [
     eat_raw: false,
     count: null,
     stock_g: 800,
-    reserved_g: 45,
-    available_g: 755,
     kcal: 389,
     protein_g: 16.9,
     fat_g: 6.9,
@@ -100,8 +102,6 @@ let mockProducts: ProductRead[] = [
     eat_raw: true,
     count: null,
     stock_g: 300,
-    reserved_g: 0,
-    available_g: 300,
     kcal: null,
     protein_g: null,
     fat_g: null,
@@ -121,8 +121,6 @@ let mockProducts: ProductRead[] = [
     eat_raw: true,
     count: null,
     stock_g: 400,
-    reserved_g: 0,
-    available_g: 400,
     kcal: 360,
     protein_g: 78.0,
     fat_g: 1.5,
@@ -142,8 +140,6 @@ let mockProducts: ProductRead[] = [
     eat_raw: true,
     count: 4,
     stock_g: 600,
-    reserved_g: 0,
-    available_g: 600,
     kcal: 52,
     protein_g: 0.3,
     fat_g: 0.2,
@@ -163,8 +159,6 @@ let mockProducts: ProductRead[] = [
     eat_raw: false,
     count: null,
     stock_g: 1000,
-    reserved_g: 700,
-    available_g: 300,
     kcal: 148,
     protein_g: 20.8,
     fat_g: 6.6,
@@ -184,8 +178,6 @@ let mockProducts: ProductRead[] = [
     eat_raw: true,
     count: null,
     stock_g: 400,
-    reserved_g: 150,
-    available_g: 250,
     kcal: 121,
     protein_g: 17.0,
     fat_g: 5.0,
@@ -198,16 +190,60 @@ let mockProducts: ProductRead[] = [
   },
 ];
 
+let mockRecipes: RecipeRead[] = [
+  {
+    id: 'recipe-1',
+    user_id: 'dev-bypass-user',
+    name: 'Запечена форель з лимоном',
+    archived: false,
+    product_ids: ['prod-6'],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'recipe-2',
+    user_id: 'dev-bypass-user',
+    name: 'Ранкова вівсянка з сиром',
+    archived: false,
+    product_ids: ['prod-2', 'prod-7'],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+let mockFrequentDishes: FrequentDishRead[] = [
+  {
+    id: 'freq-1',
+    user_id: 'dev-bypass-user',
+    recipe_id: 'recipe-2',
+    recipe_name: 'Ранкова вівсянка з сиром',
+    cooked_weight_g: 250,
+    nutrition_overridden: false,
+    kcal: 185,
+    protein_g: 17.0,
+    fat_g: 5.5,
+    carbs_g: 18.0,
+    fiber_g: 2.5,
+    sugar_g: 2.0,
+    sodium_mg: 50,
+    components: [
+      { id: 'fdc-1', frequent_dish_id: 'freq-1', product_id: 'prod-2', weight_g: 45 },
+      { id: 'fdc-2', frequent_dish_id: 'freq-1', product_id: 'prod-7', weight_g: 150 },
+    ],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
 let mockDishes: DishRead[] = [
   {
     id: 'dish-1',
     user_id: 'dev-bypass-user',
+    recipe_id: 'recipe-1',
     name: 'Запечена форель з лимоном',
-    kind: 'ready',
     cooked_weight_g: 600,
     remaining_g: 350,
     cooked_on: new Date().toISOString().slice(0, 10),
-    fixed_meal_type: null,
     notes: 'Свіжа риба на 2 дні',
     kcal: 148,
     protein_g: 20.8,
@@ -219,18 +255,18 @@ let mockDishes: DishRead[] = [
     components: [
       { id: 'comp-1', dish_id: 'dish-1', product_id: 'prod-6', weight_g: 700 },
     ],
+    stock_warnings: [],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
   {
     id: 'dish-2',
     user_id: 'dev-bypass-user',
+    recipe_id: 'recipe-2',
     name: 'Ранкова вівсянка з сиром',
-    kind: 'constant',
-    cooked_weight_g: null,
-    remaining_g: null,
-    cooked_on: null,
-    fixed_meal_type: 'breakfast',
+    cooked_weight_g: 250,
+    remaining_g: 250,
+    cooked_on: new Date().toISOString().slice(0, 10),
     notes: 'Постійна ранкова страва',
     kcal: 185,
     protein_g: 17.0,
@@ -243,6 +279,7 @@ let mockDishes: DishRead[] = [
       { id: 'comp-2', dish_id: 'dish-2', product_id: 'prod-2', weight_g: 45 },
       { id: 'comp-3', dish_id: 'dish-2', product_id: 'prod-7', weight_g: 150 },
     ],
+    stock_warnings: [],
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
@@ -257,34 +294,8 @@ let mockPinnedMeals: PinnedMealRead[] = [
       {
         id: 'pin-item-1',
         pinned_meal_id: 'pin-1',
-        dish_id: 'dish-2',
-        title: 'Ранкова вівсянка з сиром',
-        portion_g: 250,
-        portion_text: null,
-        kcal: 420,
-        protein_g: 25,
-        fat_g: 10,
-        carbs_g: 45,
-        fiber_g: 4,
-        sugar_g: 3,
-        sodium_mg: 120,
+        frequent_dish_id: 'freq-1',
         position: 0,
-      },
-      {
-        id: 'pin-item-2',
-        pinned_meal_id: 'pin-1',
-        dish_id: null,
-        title: 'Яблука Голден',
-        portion_g: 150,
-        portion_text: '1 шт',
-        kcal: 75,
-        protein_g: 0.5,
-        fat_g: 0.3,
-        carbs_g: 20,
-        fiber_g: 3,
-        sugar_g: 15,
-        sodium_mg: 2,
-        position: 1,
       },
     ],
     created_at: new Date().toISOString(),
@@ -508,8 +519,6 @@ export const mockNutritionApi = {
       eat_raw: Boolean(data.eat_raw),
       count: data.count || null,
       stock_g: data.stock_g ?? null,
-      reserved_g: 0,
-      available_g: data.stock_g ?? null,
       kcal: data.kcal ?? null,
       protein_g: data.protein_g ?? null,
       fat_g: data.fat_g ?? null,
@@ -528,10 +537,6 @@ export const mockNutritionApi = {
     const item = mockProducts.find((p) => p.id === productId);
     if (item) {
       Object.assign(item, data, { updated_at: new Date().toISOString() });
-      if (data.stock_g !== undefined) {
-        const reserved = item.reserved_g || 0;
-        item.available_g = item.stock_g !== null ? item.stock_g - reserved : null;
-      }
       return JSON.parse(JSON.stringify(item));
     }
     throw new Error('Product not found');
@@ -557,13 +562,174 @@ export const mockNutritionApi = {
     mockProducts = mockProducts.filter((p) => p.id !== productId);
   },
 
-  getDishes: async (kind?: DishKind, available?: boolean): Promise<DishRead[]> => {
-    let result = mockDishes;
-    if (kind) {
-      result = result.filter((d) => d.kind === kind);
+  // Recipes
+  getRecipes: async (includeArchived = false): Promise<RecipeRead[]> => {
+    let result = mockRecipes;
+    if (!includeArchived) {
+      result = result.filter((r) => !r.archived);
     }
+    return JSON.parse(JSON.stringify(result));
+  },
+
+  getRecipe: async (recipeId: string): Promise<RecipeRead> => {
+    const r = mockRecipes.find((recipe) => recipe.id === recipeId);
+    if (!r) throw new ApiError('Recipe not found', 404);
+    return JSON.parse(JSON.stringify(r));
+  },
+
+  createRecipe: async (data: RecipeCreate): Promise<RecipeRead> => {
+    const item: RecipeRead = {
+      id: `recipe-${Date.now()}`,
+      user_id: 'dev-bypass-user',
+      name: data.name,
+      archived: false,
+      product_ids: data.product_ids || [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockRecipes.push(item);
+    return JSON.parse(JSON.stringify(item));
+  },
+
+  updateRecipe: async (recipeId: string, data: RecipeUpdate): Promise<RecipeRead> => {
+    const r = mockRecipes.find((recipe) => recipe.id === recipeId);
+    if (!r) throw new ApiError('Recipe not found', 404);
+    if (data.name !== undefined) r.name = data.name;
+    if (data.archived !== undefined) r.archived = data.archived;
+    r.updated_at = new Date().toISOString();
+    return JSON.parse(JSON.stringify(r));
+  },
+
+  deleteRecipe: async (recipeId: string): Promise<void> => {
+    const inDishes = mockDishes.some((d) => d.recipe_id === recipeId);
+    const inFreq = mockFrequentDishes.some((f) => f.recipe_id === recipeId);
+    if (inDishes || inFreq) {
+      throw new ApiError('Cannot delete recipe referenced by dishes or frequent dishes', 409, {
+        detail: 'Cannot delete recipe referenced by dishes or frequent dishes',
+      });
+    }
+    mockRecipes = mockRecipes.filter((r) => r.id !== recipeId);
+  },
+
+  // Frequent Dishes
+  getFrequentDishes: async (): Promise<FrequentDishRead[]> => {
+    return JSON.parse(JSON.stringify(mockFrequentDishes));
+  },
+
+  getFrequentDish: async (id: string): Promise<FrequentDishRead> => {
+    const fd = mockFrequentDishes.find((f) => f.id === id);
+    if (!fd) throw new ApiError('Frequent dish not found', 404);
+    return JSON.parse(JSON.stringify(fd));
+  },
+
+  createFrequentDish: async (data: FrequentDishCreate): Promise<FrequentDishRead> => {
+    const recipe = mockRecipes.find((r) => r.id === data.recipe_id);
+    const fdId = `freq-${Date.now()}`;
+    const comps = (data.components || []).map((c, idx) => ({
+      id: `fdc-${Date.now()}-${idx}`,
+      frequent_dish_id: fdId,
+      product_id: c.product_id || '',
+      weight_g: c.weight_g,
+    }));
+    const item: FrequentDishRead = {
+      id: fdId,
+      user_id: 'dev-bypass-user',
+      recipe_id: data.recipe_id,
+      recipe_name: recipe ? recipe.name : 'Страва',
+      cooked_weight_g: data.cooked_weight_g,
+      nutrition_overridden: false,
+      kcal: data.kcal ?? 200,
+      protein_g: data.protein_g ?? 15,
+      fat_g: data.fat_g ?? 8,
+      carbs_g: data.carbs_g ?? 20,
+      fiber_g: data.fiber_g ?? 2,
+      sugar_g: data.sugar_g ?? 1,
+      sodium_mg: data.sodium_mg ?? 50,
+      components: comps,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockFrequentDishes.unshift(item);
+    return JSON.parse(JSON.stringify(item));
+  },
+
+  updateFrequentDish: async (id: string, data: FrequentDishUpdate): Promise<FrequentDishRead> => {
+    const fd = mockFrequentDishes.find((f) => f.id === id);
+    if (!fd) throw new ApiError('Frequent dish not found', 404);
+    if (data.recipe_id !== undefined) {
+      fd.recipe_id = data.recipe_id;
+      const r = mockRecipes.find((rec) => rec.id === data.recipe_id);
+      if (r) fd.recipe_name = r.name;
+    }
+    if (data.cooked_weight_g !== undefined) fd.cooked_weight_g = data.cooked_weight_g;
+    if (data.components) {
+      fd.components = data.components.map((c, idx) => ({
+        id: `fdc-${Date.now()}-${idx}`,
+        frequent_dish_id: id,
+        product_id: c.product_id || '',
+        weight_g: c.weight_g,
+      }));
+    }
+    if (data.reset_nutrition) {
+      fd.nutrition_overridden = false;
+      fd.kcal = 190;
+      fd.protein_g = 16;
+      fd.fat_g = 6;
+      fd.carbs_g = 18;
+    } else {
+      if (data.kcal !== undefined) { fd.kcal = data.kcal; fd.nutrition_overridden = true; }
+      if (data.protein_g !== undefined) { fd.protein_g = data.protein_g; fd.nutrition_overridden = true; }
+      if (data.fat_g !== undefined) { fd.fat_g = data.fat_g; fd.nutrition_overridden = true; }
+      if (data.carbs_g !== undefined) { fd.carbs_g = data.carbs_g; fd.nutrition_overridden = true; }
+    }
+    fd.updated_at = new Date().toISOString();
+    return JSON.parse(JSON.stringify(fd));
+  },
+
+  deleteFrequentDish: async (id: string): Promise<void> => {
+    mockFrequentDishes = mockFrequentDishes.filter((f) => f.id !== id);
+  },
+
+  cookFrequentDish: async (id: string, data: FrequentDishCookRequest): Promise<DishRead> => {
+    const fd = mockFrequentDishes.find((f) => f.id === id);
+    if (!fd) throw new ApiError('Frequent dish not found', 404);
+    const dishId = `dish-${Date.now()}`;
+    const dishComps = fd.components.map((c, idx) => ({
+      id: `comp-${Date.now()}-${idx}`,
+      dish_id: dishId,
+      product_id: c.product_id,
+      weight_g: c.weight_g,
+    }));
+    const cookedDish: DishRead = {
+      id: dishId,
+      user_id: 'dev-bypass-user',
+      recipe_id: fd.recipe_id,
+      name: fd.recipe_name,
+      cooked_weight_g: fd.cooked_weight_g,
+      remaining_g: fd.cooked_weight_g,
+      cooked_on: data.cooked_on,
+      notes: null,
+      kcal: fd.kcal,
+      protein_g: fd.protein_g,
+      fat_g: fd.fat_g,
+      carbs_g: fd.carbs_g,
+      fiber_g: fd.fiber_g,
+      sugar_g: fd.sugar_g,
+      sodium_mg: fd.sodium_mg,
+      components: dishComps,
+      stock_warnings: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockDishes.unshift(cookedDish);
+    return JSON.parse(JSON.stringify(cookedDish));
+  },
+
+  // Dishes
+  getDishes: async (available?: boolean): Promise<DishRead[]> => {
+    let result = mockDishes;
     if (available) {
-      result = result.filter((d) => d.kind === 'constant' || (d.remaining_g !== null && d.remaining_g > 0));
+      result = result.filter((d) => d.remaining_g > 0);
     }
     return JSON.parse(JSON.stringify(result));
   },
@@ -575,6 +741,25 @@ export const mockNutritionApi = {
   },
 
   createDish: async (data: DishCreate): Promise<DishRead> => {
+    let recipeId = data.recipe_id;
+    let recipeName = data.name || 'Нова страва';
+    if (data.new_recipe) {
+      recipeName = data.new_recipe.name;
+      const newRec: RecipeRead = {
+        id: `recipe-${Date.now()}`,
+        user_id: 'dev-bypass-user',
+        name: recipeName,
+        archived: false,
+        product_ids: (data.components || []).map((c) => c.product_id || '').filter(Boolean),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      mockRecipes.push(newRec);
+      recipeId = newRec.id;
+    } else if (recipeId) {
+      const rec = mockRecipes.find((r) => r.id === recipeId);
+      if (rec) recipeName = rec.name;
+    }
     const compReads: { id: string; dish_id: string; product_id: string; weight_g: number }[] = [];
     const dishId = `dish-${Date.now()}`;
 
@@ -590,8 +775,6 @@ export const mockNutritionApi = {
           eat_raw: false,
           count: null,
           stock_g: c.new_product.stock_g ?? null,
-          reserved_g: 0,
-          available_g: c.new_product.stock_g ?? null,
           kcal: 100,
           protein_g: 5,
           fat_g: 2,
@@ -607,17 +790,6 @@ export const mockNutritionApi = {
       }
 
       if (pId) {
-        const prod = mockProducts.find((p) => p.id === pId);
-        if (prod && prod.stock_g !== null && prod.stock_g !== undefined) {
-          const avail = prod.available_g ?? prod.stock_g;
-          if (c.weight_g > avail) {
-            throw new ApiError(`Not enough available stock for product '${prod.name}'`, 409, {
-              detail: `Not enough available stock for product '${prod.name}'`,
-            });
-          }
-          prod.stock_g -= c.weight_g;
-          prod.available_g = Math.max(0, (prod.available_g ?? prod.stock_g) - c.weight_g);
-        }
         compReads.push({
           id: `comp-${Date.now()}-${idx}`,
           dish_id: dishId,
@@ -630,21 +802,21 @@ export const mockNutritionApi = {
     const dish: DishRead = {
       id: dishId,
       user_id: 'dev-bypass-user',
-      name: data.name,
-      kind: data.kind,
-      cooked_weight_g: data.cooked_weight_g || null,
-      remaining_g: data.remaining_g !== undefined ? data.remaining_g : (data.cooked_weight_g || null),
+      recipe_id: recipeId || 'recipe-1',
+      name: recipeName,
+      cooked_weight_g: data.cooked_weight_g,
+      remaining_g: data.remaining_g !== undefined && data.remaining_g !== null ? data.remaining_g : data.cooked_weight_g,
       cooked_on: data.cooked_on || null,
-      fixed_meal_type: data.fixed_meal_type || null,
       notes: data.notes || null,
-      kcal: 220,
-      protein_g: 18,
-      fat_g: 8,
-      carbs_g: 16,
-      fiber_g: 2,
-      sugar_g: 1,
-      sodium_mg: 150,
+      kcal: data.kcal ?? 220,
+      protein_g: data.protein_g ?? 18,
+      fat_g: data.fat_g ?? 8,
+      carbs_g: data.carbs_g ?? 16,
+      fiber_g: data.fiber_g ?? 2,
+      sugar_g: data.sugar_g ?? 1,
+      sodium_mg: data.sodium_mg ?? 150,
       components: compReads,
+      stock_warnings: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -669,8 +841,6 @@ export const mockNutritionApi = {
               eat_raw: false,
               count: null,
               stock_g: c.new_product.stock_g ?? null,
-              reserved_g: 0,
-              available_g: c.new_product.stock_g ?? null,
               kcal: 100,
               protein_g: 5,
               fat_g: 2,
@@ -685,15 +855,6 @@ export const mockNutritionApi = {
             pId = newProd.id;
           }
           if (pId) {
-            const prod = mockProducts.find((p) => p.id === pId);
-            if (prod && prod.stock_g !== null && prod.stock_g !== undefined) {
-              const avail = prod.available_g ?? prod.stock_g;
-              if (c.weight_g > avail) {
-                throw new ApiError(`Not enough available stock for product '${prod.name}'`, 409, {
-                  detail: `Not enough available stock for product '${prod.name}'`,
-                });
-              }
-            }
             compReads.push({
               id: `comp-${Date.now()}-${idx}`,
               dish_id: dishId,
@@ -709,8 +870,11 @@ export const mockNutritionApi = {
         cooked_weight_g: data.cooked_weight_g ?? dish.cooked_weight_g,
         remaining_g: data.remaining_g ?? dish.remaining_g,
         cooked_on: data.cooked_on ?? dish.cooked_on,
-        fixed_meal_type: data.fixed_meal_type ?? dish.fixed_meal_type,
         notes: data.notes ?? dish.notes,
+        kcal: data.kcal ?? dish.kcal,
+        protein_g: data.protein_g ?? dish.protein_g,
+        fat_g: data.fat_g ?? dish.fat_g,
+        carbs_g: data.carbs_g ?? dish.carbs_g,
         updated_at: new Date().toISOString(),
       });
       return JSON.parse(JSON.stringify(dish));
@@ -742,26 +906,34 @@ export const mockNutritionApi = {
       const isUnpinned = mockUnpinnedDaySlots.has(`${menuDate}:${pm.type}`);
       if (!isDeleted && !isPersisted) {
         const activePin = !isUnpinned && mockPinnedMeals.find((p) => p.active && p.meal_type === pm.type);
-        const items: MenuItemRead[] = activePin ? activePin.items.map((pi) => ({
-          id: `item-proj-${pi.id}`,
-          menu_id: `menu-proj-${pm.type}`,
-          dish_id: pi.dish_id,
-          title: pi.title,
-          portion_g: pi.portion_g,
-          portion_text: pi.portion_text,
-          kcal: pi.kcal ?? null,
-          protein_g: pi.protein_g ?? null,
-          fat_g: pi.fat_g ?? null,
-          carbs_g: pi.carbs_g ?? null,
-          fiber_g: pi.fiber_g ?? null,
-          sugar_g: pi.sugar_g ?? null,
-          sodium_mg: pi.sodium_mg ?? null,
-          nutrition_source: 'model',
-          origin: 'manual',
-          position: pi.position,
-          incomplete: false,
-          updated_at: new Date().toISOString(),
-        })) : [];
+        const items: MenuItemRead[] = [];
+        if (activePin) {
+          for (const [idx, pi] of activePin.items.entries()) {
+            const freq = mockFrequentDishes.find((f) => f.id === pi.frequent_dish_id);
+            const portion = freq ? freq.cooked_weight_g : 200;
+            const ratio = portion / 100.0;
+            items.push({
+              id: `item-proj-${pi.id}`,
+              menu_id: `menu-proj-${pm.type}`,
+              dish_id: freq ? `dish-proj-${freq.id}` : null,
+              title: freq ? freq.recipe_name : 'Страва',
+              portion_g: portion,
+              portion_text: `${portion} г`,
+              kcal: freq?.kcal ? Math.round(freq.kcal * ratio) : null,
+              protein_g: freq?.protein_g ? Math.round(freq.protein_g * ratio * 10) / 10 : null,
+              fat_g: freq?.fat_g ? Math.round(freq.fat_g * ratio * 10) / 10 : null,
+              carbs_g: freq?.carbs_g ? Math.round(freq.carbs_g * ratio * 10) / 10 : null,
+              fiber_g: freq?.fiber_g ? Math.round(freq.fiber_g * ratio * 10) / 10 : null,
+              sugar_g: freq?.sugar_g ? Math.round(freq.sugar_g * ratio * 10) / 10 : null,
+              sodium_mg: freq?.sodium_mg ? Math.round(freq.sodium_mg * ratio * 10) / 10 : null,
+              nutrition_source: 'computed',
+              origin: 'manual',
+              position: pi.position ?? idx,
+              incomplete: false,
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
 
         const projectedMenu: MenuRead = {
           id: null,
@@ -1134,7 +1306,7 @@ export const mockNutritionApi = {
         for (const comp of d.components) {
           const prod = mockProducts.find((p) => p.id === comp.product_id);
           if (prod && prod.stock_g !== null && prod.stock_g !== undefined) {
-            const avail = prod.available_g ?? prod.stock_g;
+            const avail = prod.stock_g;
             if (comp.weight_g > avail) {
               throw new ApiError(`Not enough available stock for product '${prod.name}'`, 409, {
                 detail: `Not enough available stock for product '${prod.name}'`,
@@ -1215,7 +1387,7 @@ export const mockNutritionApi = {
               for (const comp of d.components) {
                 const prod = mockProducts.find((p) => p.id === comp.product_id);
                 if (prod && prod.stock_g !== null && prod.stock_g !== undefined) {
-                  const avail = prod.available_g ?? prod.stock_g;
+                  const avail = prod.stock_g;
                   if (comp.weight_g > avail) {
                     throw new ApiError(`Not enough available stock for product '${prod.name}'`, 409, {
                       detail: `Not enough available stock for product '${prod.name}'`,
@@ -1333,26 +1505,32 @@ export const mockNutritionApi = {
     const pmSchedule = mockProfile.meals.find((p) => p.type === slotLower);
     const time = menu?.time || pmSchedule?.time || null;
 
-    const pinnedItems: MenuItemRead[] = pinnedMeal.items.map((pi, idx) => ({
-      id: `item-${Date.now()}-${idx}`,
-      menu_id: menu?.id || `menu-${slot}`,
-      dish_id: pi.dish_id,
-      title: pi.title,
-      portion_g: pi.portion_g,
-      portion_text: pi.portion_text,
-      kcal: pi.kcal ?? null,
-      protein_g: pi.protein_g ?? null,
-      fat_g: pi.fat_g ?? null,
-      carbs_g: pi.carbs_g ?? null,
-      fiber_g: pi.fiber_g ?? null,
-      sugar_g: pi.sugar_g ?? null,
-      sodium_mg: pi.sodium_mg ?? null,
-      nutrition_source: 'user',
-      origin: 'manual',
-      position: pi.position,
-      incomplete: false,
-      updated_at: new Date().toISOString(),
-    }));
+    const pinnedItems: MenuItemRead[] = [];
+    for (const [idx, pi] of pinnedMeal.items.entries()) {
+      const freq = mockFrequentDishes.find((f) => f.id === pi.frequent_dish_id);
+      const portion = freq ? freq.cooked_weight_g : 200;
+      const ratio = portion / 100.0;
+      pinnedItems.push({
+        id: `item-${Date.now()}-${idx}`,
+        menu_id: menu?.id || `menu-${slot}`,
+        dish_id: freq ? `dish-${freq.id}` : null,
+        title: freq ? freq.recipe_name : 'Страва',
+        portion_g: portion,
+        portion_text: `${portion} г`,
+        kcal: freq?.kcal ? Math.round(freq.kcal * ratio) : null,
+        protein_g: freq?.protein_g ? Math.round(freq.protein_g * ratio * 10) / 10 : null,
+        fat_g: freq?.fat_g ? Math.round(freq.fat_g * ratio * 10) / 10 : null,
+        carbs_g: freq?.carbs_g ? Math.round(freq.carbs_g * ratio * 10) / 10 : null,
+        fiber_g: freq?.fiber_g ? Math.round(freq.fiber_g * ratio * 10) / 10 : null,
+        sugar_g: freq?.sugar_g ? Math.round(freq.sugar_g * ratio * 10) / 10 : null,
+        sodium_mg: freq?.sodium_mg ? Math.round(freq.sodium_mg * ratio * 10) / 10 : null,
+        nutrition_source: 'computed',
+        origin: 'manual',
+        position: pi.position ?? idx,
+        incomplete: false,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
     if (menu) {
       menu.pinned = true;
@@ -1394,10 +1572,8 @@ export const mockNutritionApi = {
       throw new ApiError(`Прийом «${mealTypeLabel(slot)}» відсутній у розкладі профілю`, 400);
     }
 
-    for (const item of data.items) {
-      if (!item.dish_id && (!item.title || !item.title.trim())) {
-        throw new ApiError('Для вільного запису обовʼязкова назва', 400);
-      }
+    if (!data.items || data.items.length === 0) {
+      throw new ApiError('A pinned meal must have at least 1 item', 422);
     }
 
     let existing = mockPinnedMeals.find(
@@ -1405,26 +1581,12 @@ export const mockNutritionApi = {
     );
 
     const now = new Date().toISOString();
-    const formattedItems: PinnedMealItemRead[] = data.items.map((it, idx) => {
-      const linkedDish = it.dish_id ? mockDishes.find((d) => d.id === it.dish_id) : null;
-      const kcalVal = it.kcal !== undefined && it.kcal !== null ? it.kcal : (linkedDish ? linkedDish.kcal : null);
-      return {
-        id: `pin-item-${Date.now()}-${idx}`,
-        pinned_meal_id: existing?.id || `pin-${Date.now()}`,
-        dish_id: it.dish_id || null,
-        title: it.title?.trim() || (linkedDish ? linkedDish.name : 'Позиція'),
-        portion_g: it.portion_g !== undefined ? it.portion_g : null,
-        portion_text: it.portion_text?.trim() || null,
-        kcal: kcalVal,
-        protein_g: it.protein_g ?? (linkedDish ? linkedDish.protein_g : null),
-        fat_g: it.fat_g ?? (linkedDish ? linkedDish.fat_g : null),
-        carbs_g: it.carbs_g ?? (linkedDish ? linkedDish.carbs_g : null),
-        fiber_g: it.fiber_g ?? (linkedDish ? linkedDish.fiber_g : null),
-        sugar_g: it.sugar_g ?? (linkedDish ? linkedDish.sugar_g : null),
-        sodium_mg: it.sodium_mg ?? (linkedDish ? linkedDish.sodium_mg : null),
-        position: it.position ?? idx,
-      };
-    });
+    const formattedItems: PinnedMealItemRead[] = data.items.map((it, idx) => ({
+      id: `pin-item-${Date.now()}-${idx}`,
+      pinned_meal_id: existing?.id || `pin-${Date.now()}`,
+      frequent_dish_id: it.frequent_dish_id,
+      position: it.position ?? idx,
+    }));
 
     if (existing) {
       existing.active = data.active;

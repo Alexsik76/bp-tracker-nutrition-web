@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { nutritionApi } from '../../services/api';
-import type { DishRead, DishKind } from '../../types/nutrition';
-import { mealTypeLabel } from '../../utils/mealTypes';
+import type { DishRead } from '../../types/nutrition';
 
 defineProps<{
   dish: DishRead;
-  activeKind: DishKind;
 }>();
 
 const emit = defineEmits<{
@@ -38,10 +36,7 @@ onMounted(async () => {
       <div class="dish-title-area" @click="emit('edit', dish)">
         <h3 class="dish-name">{{ dish.name }}</h3>
         <div class="dish-meta">
-          <span v-if="dish.fixed_meal_type" class="badge badge-info">
-            {{ mealTypeLabel(dish.fixed_meal_type) }}
-          </span>
-          <span v-if="dish.cooked_on && activeKind === 'ready'" class="cooked-date num-mono">
+          <span v-if="dish.cooked_on" class="cooked-date num-mono">
             Приготовлено: {{ dish.cooked_on }}
           </span>
         </div>
@@ -62,7 +57,7 @@ onMounted(async () => {
 
     <!-- Nutrition section if present -->
     <div v-if="dish.kcal !== null && dish.kcal !== undefined" class="dish-nutrition num-mono">
-      <span class="dish-kcal">{{ Math.round(dish.kcal) }} ккал</span>
+      <span class="dish-kcal">{{ Math.round(dish.kcal) }} ккал / 100 г</span>
       <span v-if="dish.protein_g !== null || dish.fat_g !== null || dish.carbs_g !== null" class="dish-macros">
         · Б: {{ dish.protein_g ?? 0 }} г · Ж: {{ dish.fat_g ?? 0 }} г · В: {{ dish.carbs_g ?? 0 }} г
       </span>
@@ -91,7 +86,7 @@ onMounted(async () => {
     </div>
 
     <!-- Ready dish weight & stepper controls -->
-    <div v-if="activeKind === 'ready'" class="ready-dish-actions">
+    <div class="ready-dish-actions">
       <div class="weight-display">
         <span class="weight-label">Залишок:</span>
         <span class="weight-value num-mono">
@@ -153,7 +148,7 @@ onMounted(async () => {
 
 .dish-name {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 4px;
 }
@@ -162,10 +157,10 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--space-8);
+  font-size: 12px;
 }
 
 .cooked-date {
-  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -174,7 +169,7 @@ onMounted(async () => {
 }
 
 .dish-nutrition {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-dim);
 }
 
@@ -188,17 +183,16 @@ onMounted(async () => {
 }
 
 .dish-components {
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: var(--radius-control);
-  padding: var(--space-8) var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .components-label {
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 4px;
+  letter-spacing: 0.5px;
 }
 
 .components-chips {
@@ -208,80 +202,83 @@ onMounted(async () => {
 }
 
 .component-chip {
-  font-size: 12.5px;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px 8px;
   border-radius: var(--radius-pill);
+  font-size: 12px;
   color: var(--text-primary);
 }
 
 .comp-weight {
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 11px;
 }
 
 .dish-notes {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-muted);
   font-style: italic;
+  background: rgba(255, 255, 255, 0.02);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-control);
 }
 
 .ready-dish-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-8);
   padding-top: var(--space-8);
   border-top: 1px solid var(--surface-border);
-  gap: var(--space-8);
-  flex-wrap: wrap;
 }
 
 .weight-display {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
 }
 
 .weight-label {
-  font-size: 11px;
   color: var(--text-muted);
-  text-transform: uppercase;
 }
 
 .weight-value {
-  font-size: 14px;
   color: var(--text-primary);
-}
-
-.weight-value strong {
-  color: var(--info);
 }
 
 .stepper-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-8);
 }
 
 .btn-step {
-  min-height: 36px;
+  height: 32px;
   padding: 0 10px;
-  border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--surface-border);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
   font-size: 12px;
-  font-family: var(--font-mono);
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .btn-step:hover {
   background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .btn-finish {
-  min-height: 36px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 10px;
   font-size: 12px;
+  font-weight: 600;
 }
 </style>

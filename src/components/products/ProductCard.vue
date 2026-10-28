@@ -36,7 +36,7 @@ function getPreferenceBadge(val: ProductPreference) {
             {{ product.count }} шт
           </span>
           <span v-if="product.stock_g !== null && product.stock_g !== undefined" class="badge badge-neutral num-mono">
-            Запас: {{ product.stock_g }} г<template v-if="product.reserved_g"> (вільно: {{ product.available_g ?? (product.stock_g - product.reserved_g) }} г, резерв: {{ product.reserved_g }} г)</template>
+            Запас: {{ product.stock_g }} г
           </span>
         </div>
         <div v-if="product.kcal !== null && product.kcal !== undefined" class="product-nutrition num-mono">

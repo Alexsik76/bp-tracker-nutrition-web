@@ -160,9 +160,6 @@ function handleSubmit() {
         </div>
       </div>
 
-      <div v-if="product && product.reserved_g" class="stock-status-hint">
-        Доступно: {{ product.available_g ?? ((product.stock_g || 0) - product.reserved_g) }} г (зарезервовано стравами: {{ product.reserved_g }} г)
-      </div>
 
       <div v-if="product && product.kcal !== null && product.kcal !== undefined" class="nutrition-status-hint num-mono">
         Оцінка КБЖВ на 100 г: ≈ {{ Math.round(product.kcal) }} ккал
