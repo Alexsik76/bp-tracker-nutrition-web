@@ -57,7 +57,7 @@ const deleteMealTooltip = computed(() => {
           <span>Закріплено</span>
         </span>
         <button
-          v-if="hasAvailablePin"
+          v-if="hasAvailablePin && menu.status !== 'eaten'"
           type="button"
           class="btn-pin-chip"
           :disabled="readOnly"

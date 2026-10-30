@@ -51,6 +51,11 @@ function calculateSlotKcal(items: PinnedMealItemRead[]): number {
   }, 0);
 }
 
+function portionMacro(value: number | null | undefined, cookedWeightG: number): number {
+  if (value === null || value === undefined) return 0;
+  return Math.round(((value * cookedWeightG) / 100) * 10) / 10;
+}
+
 async function loadData() {
   loading.value = true;
   try {
@@ -365,9 +370,9 @@ onMounted(() => {
                       ≈ {{ Math.round((frequentDishesMap.get(item.frequent_dish_id)!.kcal! * frequentDishesMap.get(item.frequent_dish_id)!.cooked_weight_g) / 100) }} ккал
                     </span>
                     <span class="macros-pill">
-                      Б: {{ frequentDishesMap.get(item.frequent_dish_id)!.protein_g ?? 0 }} ·
-                      Ж: {{ frequentDishesMap.get(item.frequent_dish_id)!.fat_g ?? 0 }} ·
-                      В: {{ frequentDishesMap.get(item.frequent_dish_id)!.carbs_g ?? 0 }}
+                      Б: {{ portionMacro(frequentDishesMap.get(item.frequent_dish_id)!.protein_g, frequentDishesMap.get(item.frequent_dish_id)!.cooked_weight_g) }} ·
+                      Ж: {{ portionMacro(frequentDishesMap.get(item.frequent_dish_id)!.fat_g, frequentDishesMap.get(item.frequent_dish_id)!.cooked_weight_g) }} ·
+                      В: {{ portionMacro(frequentDishesMap.get(item.frequent_dish_id)!.carbs_g, frequentDishesMap.get(item.frequent_dish_id)!.cooked_weight_g) }}
                     </span>
                   </template>
                 </div>
