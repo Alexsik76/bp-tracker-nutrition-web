@@ -441,15 +441,23 @@ const realNutritionApi = {
   },
 
   // Menus
-  getDayMenus: async (menuDate: string): Promise<DayMenuRead | null> => {
+  getDayMenus: async (menuDate: string, now?: string): Promise<DayMenuRead | null> => {
     try {
-      return await request<DayMenuRead>(`/nutrition/menus/${menuDate}`);
+      const qs = now ? `?now=${encodeURIComponent(now)}` : '';
+      return await request<DayMenuRead>(`/nutrition/menus/${menuDate}${qs}`);
     } catch (err) {
       if (isExpectedEmptyStatus(err)) {
         return null;
       }
       throw err;
     }
+  },
+
+  createDay: async (menuDate: string, now?: string): Promise<DayMenuRead> => {
+    const qs = now ? `?now=${encodeURIComponent(now)}` : '';
+    return request<DayMenuRead>(`/nutrition/menus/${menuDate}/create${qs}`, {
+      method: 'POST',
+    });
   },
 
   updateMenu: async (menuId: string, data: MenuUpdate): Promise<MenuRead> => {
