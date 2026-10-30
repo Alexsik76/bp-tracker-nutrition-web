@@ -599,7 +599,7 @@ export function useDayMenu() {
   }
 
   function getSlotKcal(menu: MenuRead): number {
-    return menu.items.reduce((sum, item) => sum + (item.kcal || 0), 0);
+    return Math.round(menu.items.reduce((sum, item) => sum + (item.kcal || 0), 0));
   }
 
   return {

@@ -68,6 +68,13 @@ watch(
   { immediate: true }
 );
 
+// v-model.number yields '' for a cleared input; the API expects a number or null
+function toNullableNumber(value: number | string | null): number | null {
+  if (value === null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function handleSubmit() {
   if (!formName.value.trim()) {
     toastStore.show('Вкажіть назву продукту', 'warning');
@@ -79,8 +86,8 @@ function handleSubmit() {
     availability: formAvailability.value,
     preference: formPreference.value,
     eat_raw: formEatRaw.value,
-    count: formCount.value,
-    stock_g: formStockG.value,
+    count: toNullableNumber(formCount.value),
+    stock_g: toNullableNumber(formStockG.value),
   };
 
   emit('save', payload);
