@@ -1,4 +1,5 @@
 import { ApiError } from './api';
+import { formatLocalDate } from '../utils/date';
 import type {
   NutritionProfileRead,
   NutritionProfileUpsert,
@@ -305,6 +306,7 @@ let mockPinnedMeals: PinnedMealRead[] = [
 
 let mockDeletedSlots = new Set<string>();
 let mockUnpinnedDaySlots = new Set<string>();
+let mockCreatedDays = new Set<string>();
 
 let mockMenus: MenuRead[] = [
   {
@@ -470,7 +472,7 @@ function deriveMenuState(menu: MenuRead): void {
     menu.status = 'eaten';
   } else if (items.some((i) => i.incomplete)) {
     menu.status = 'incomplete';
-  } else {
+  } else if (menu.status !== 'missed') {
     menu.status = 'planned';
   }
 }
@@ -886,7 +888,67 @@ export const mockNutritionApi = {
     mockDishes = mockDishes.filter((d) => d.id !== dishId);
   },
 
-  getDayMenus: async (menuDate: string): Promise<DayMenuRead> => {
+  createDay: async (menuDate: string, now?: string): Promise<DayMenuRead> => {
+    const isToday = menuDate === formatLocalDate();
+    if (isToday || mockCreatedDays.has(menuDate)) {
+      throw new ApiError('Conflict: Day already created', 409);
+    }
+    mockCreatedDays.add(menuDate);
+    return mockNutritionApi.getDayMenus(menuDate, now);
+  },
+
+  getDayMenus: async (menuDate: string, _now?: string): Promise<DayMenuRead> => {
+    const isToday = menuDate === formatLocalDate();
+    const isDayCreated = isToday || mockCreatedDays.has(menuDate);
+
+    // If day is not created, return projected meals with id: null and no items
+    if (!isDayCreated) {
+      const projected: MenuRead[] = [];
+      for (const pm of mockProfile.meals) {
+        if (!mockDeletedSlots.has(`${menuDate}:${pm.type}`)) {
+          projected.push({
+            id: null,
+            user_id: 'dev-bypass-user',
+            date: menuDate,
+            meal_type: pm.type,
+            time: pm.time,
+            status: 'planned',
+            eaten_at: null,
+            regenerations: 0,
+            kcal_incomplete: false,
+            pinned: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            items: [],
+          });
+        }
+      }
+
+      projected.sort((a, b) => {
+        if (a.time && b.time) {
+          const cmp = a.time.localeCompare(b.time);
+          if (cmp !== 0) return cmp;
+        } else if (a.time) {
+          return -1;
+        } else if (b.time) {
+          return 1;
+        }
+        return mealTypeOrder(a.meal_type) - mealTypeOrder(b.meal_type);
+      });
+
+      return {
+        date: menuDate,
+        day_created: false,
+        menus: projected,
+        notes: JSON.parse(JSON.stringify(mockNotes.filter((n) => n.date === menuDate))),
+        off_plan: JSON.parse(JSON.stringify(mockOffPlan.filter((e) => e.date === menuDate))),
+        kcal_incomplete: false,
+        can_generate_day: false,
+        day_generation_replaces_manual: false,
+        available_pins: [],
+      };
+    }
+
     // 1. Gather persisted menus for this date (excluding deleted ones)
     const persisted = mockMenus
       .filter((m) => (m.date === menuDate || !m.date) && !mockDeletedSlots.has(`${menuDate}:${m.meal_type}`))
@@ -990,6 +1052,7 @@ export const mockNutritionApi = {
 
     return {
       date: menuDate,
+      day_created: true,
       menus: JSON.parse(JSON.stringify(allMenus)),
       notes: JSON.parse(JSON.stringify(mockNotes.filter((n) => n.date === menuDate))),
       off_plan: JSON.parse(JSON.stringify(mockOffPlan.filter((e) => e.date === menuDate))),
@@ -1011,6 +1074,12 @@ export const mockNutritionApi = {
   },
 
   createMeal: async (menuDate: string, data: MealCreate): Promise<MenuRead> => {
+    const isToday = menuDate === formatLocalDate();
+    const isDayCreated = isToday || mockCreatedDays.has(menuDate);
+    if (!isDayCreated) {
+      throw new ApiError('Day not created', 409);
+    }
+
     const slotLower = data.meal_type;
     const existsPersisted = mockMenus.some(
       (m) => (m.date === menuDate || !m.date) && m.meal_type === slotLower

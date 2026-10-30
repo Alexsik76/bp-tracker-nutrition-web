@@ -20,6 +20,10 @@ export function isToday(dateStr: string): boolean {
   return dateStr === formatLocalDate(new Date());
 }
 
+export function isAfterToday(dateStr: string): boolean {
+  return dateStr > formatLocalDate(new Date());
+}
+
 const MONTHS_UK = [
   'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
   'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня',
@@ -50,8 +54,7 @@ export function formatFriendlyDate(dateStr: string): string {
   return `${weekday}, ${day} ${month}`;
 }
 
-export function nowLocalIso(): string {
-  const now = new Date();
+export function nowLocalIso(now: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0');
 
   const year = now.getFullYear();

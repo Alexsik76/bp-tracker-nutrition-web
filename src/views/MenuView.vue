@@ -10,6 +10,7 @@ import MealSlotCard from '../components/menu/MealSlotCard.vue';
 import MenuExtrasCard from '../components/menu/MenuExtrasCard.vue';
 import OffPlanCard from '../components/menu/OffPlanCard.vue';
 import MenuNotesCard from '../components/menu/MenuNotesCard.vue';
+import ModalSheet from '../components/ModalSheet.vue';
 import AddMealModalSheet from '../components/menu/AddMealModalSheet.vue';
 import AddItemModalSheet from '../components/menu/AddItemModalSheet.vue';
 import EditItemModalSheet from '../components/menu/EditItemModalSheet.vue';
@@ -17,11 +18,18 @@ import ReplaceItemModalSheet from '../components/menu/ReplaceItemModalSheet.vue'
 import OffPlanModalSheet from '../components/menu/OffPlanModalSheet.vue';
 import type { MenuItemRead, MealType } from '../types/nutrition';
 import { mealTypeLabel } from '../utils/mealTypes';
+import { formatFriendlyDate } from '../utils/date';
 
 const {
   currentDate,
   menus,
   loading,
+  dayCreated,
+  creatingDay,
+  isCreateDayModalOpen,
+  openCreateDayModal,
+  closeCreateDayModal,
+  handleCreateDay,
   generating,
   generatingDay,
   generatingSlot,
@@ -73,11 +81,17 @@ const unmatchedAvailablePins = computed(() => {
   return availablePins.value.filter((p) => !existingSlots.has(p.meal_type));
 });
 
+function formatModalDate(dateStr: string): string {
+  const friendly = formatFriendlyDate(dateStr);
+  return friendly.replace(/^(Завтра|Вчора|Сьогодні)/, (s) => s.toLowerCase());
+}
+
 // Modal: Add meal slot
 const isAddMealModalOpen = ref(false);
 const savingMeal = ref(false);
 
 function openAddMealModal() {
+  if (!dayCreated.value) return;
   isAddMealModalOpen.value = true;
 }
 
@@ -112,6 +126,7 @@ const savingReplaceItem = ref(false);
 const isOffPlanModalOpen = ref(false);
 
 async function openAddItemModal(slot: MealType) {
+  if (!dayCreated.value) return;
   activeSlotForAdd.value = slot;
   isAddItemModalOpen.value = true;
   await loadInventory();
@@ -136,6 +151,7 @@ async function handleSaveNewItem(payload: {
 }
 
 function openEditItemModal(item: MenuItemRead) {
+  if (!dayCreated.value) return;
   const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === item.id));
   if (parentMenu?.status === 'eaten') return;
   editingItem.value = item;
@@ -174,6 +190,7 @@ async function handleSaveItemEdit(payload: {
 }
 
 async function openReplaceItemModal(item: MenuItemRead) {
+  if (!dayCreated.value) return;
   const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === item.id));
   if (parentMenu?.status === 'eaten') return;
   replacingItem.value = item;
@@ -221,6 +238,24 @@ onMounted(() => {
       @today="goToToday"
     />
 
+    <!-- Banner when day is not created -->
+    <div v-if="!dayCreated && !loading" class="card create-day-banner">
+      <div class="create-day-banner-content">
+        <div class="create-day-banner-text">
+          <span class="create-day-badge">Тільки перегляд</span>
+          <p class="create-day-title">Раціон на цей день ще не створено</p>
+          <p class="create-day-desc">Для створення раціону буде зарезервовано продукти зі складу</p>
+        </div>
+        <button
+          type="button"
+          class="btn btn-primary create-day-btn"
+          @click="openCreateDayModal"
+        >
+          Створити день
+        </button>
+      </div>
+    </div>
+
     <!-- Summary KPI banner if menus exist -->
     <CalorieSummaryCard
       v-if="menus.length > 0"
@@ -239,8 +274,8 @@ onMounted(() => {
         title="Меню на цей день ще не складено"
         description="ШІ автоматично врахує залишки з холодильника, ваші цілі та обмеження з профілю"
         :action-label="generatingDay ? generationStageText : 'Згенерувати меню на весь день'"
-        :action-disabled="generating || !canGenerateDay"
-        :action-title="!canGenerateDay ? 'Усе з\'їдено, пропущено або закріплено' : undefined"
+        :action-disabled="generating || !canGenerateDay || !dayCreated"
+        :action-title="!dayCreated ? 'День ще не створено' : (!canGenerateDay ? 'Усе з\'їдено або закріплено' : undefined)"
         @action="handleGenerateDay"
       >
         <template #icon>
@@ -254,6 +289,8 @@ onMounted(() => {
       <button
         type="button"
         class="btn btn-secondary btn-full add-meal-btn"
+        :disabled="!dayCreated"
+        :title="!dayCreated ? 'День ще не створено' : undefined"
         @click="openAddMealModal"
       >
         + Додати прийом їжі
@@ -268,7 +305,8 @@ onMounted(() => {
             :key="pin.meal_type"
             type="button"
             class="btn-pin-chip"
-            :title="`Відновити закріплений прийом «${mealTypeLabel(pin.meal_type)}»`"
+            :disabled="!dayCreated"
+            :title="!dayCreated ? 'День ще не створено' : `Відновити закріплений прийом «${mealTypeLabel(pin.meal_type)}»`"
             @click="handlePinMeal(pin.meal_type)"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -295,7 +333,8 @@ onMounted(() => {
             :key="s"
             type="button"
             class="btn btn-secondary quick-slot-btn"
-            :disabled="generating"
+            :disabled="generating || !dayCreated"
+            :title="!dayCreated ? 'День ще не створено' : undefined"
             @click="handleGenerateSlot(s)"
           >
             <span v-if="generatingSlot === s" class="spinner-sm"></span>
@@ -311,6 +350,7 @@ onMounted(() => {
         v-for="menu in menus"
         :key="menu.id ?? menu.meal_type"
         :menu="menu"
+        :read-only="!dayCreated"
         :generating="generating"
         :generating-slot="generatingSlot"
         :generation-stage-text="generationStageText"
@@ -329,6 +369,8 @@ onMounted(() => {
       <button
         type="button"
         class="btn btn-secondary btn-full add-meal-btn"
+        :disabled="!dayCreated"
+        :title="!dayCreated ? 'День ще не створено' : undefined"
         @click="openAddMealModal"
       >
         + Додати прийом їжі
@@ -343,7 +385,8 @@ onMounted(() => {
             :key="pin.meal_type"
             type="button"
             class="btn-pin-chip"
-            :title="`Відновити закріплений прийом «${mealTypeLabel(pin.meal_type)}»`"
+            :disabled="!dayCreated"
+            :title="!dayCreated ? 'День ще не створено' : `Відновити закріплений прийом «${mealTypeLabel(pin.meal_type)}»`"
             @click="handlePinMeal(pin.meal_type)"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -359,8 +402,8 @@ onMounted(() => {
       <div class="regenerate-day-area">
         <button
           class="btn btn-secondary btn-full"
-          :disabled="generating || !canGenerateDay"
-          :title="!canGenerateDay ? 'Усе з\'їдено, пропущено або закріплено' : undefined"
+          :disabled="generating || !canGenerateDay || !dayCreated"
+          :title="!dayCreated ? 'День ще не створено' : (!canGenerateDay ? 'Усе з\'їдено або закріплено' : undefined)"
           @click="handleGenerateDay"
         >
           <span v-if="generatingDay" class="spinner-sm"></span>
@@ -369,6 +412,17 @@ onMounted(() => {
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
           </svg>
           <span>{{ generatingDay ? generationStageText : 'Перегенерувати весь день (ШІ)' }}</span>
+        </button>
+      </div>
+
+      <!-- Create Day Button at bottom when not created -->
+      <div v-if="!dayCreated" class="create-day-action-area">
+        <button
+          type="button"
+          class="btn btn-primary btn-full create-day-full-btn"
+          @click="openCreateDayModal"
+        >
+          Створити день
         </button>
       </div>
     </div>
@@ -444,12 +498,125 @@ onMounted(() => {
       @close="isAddMealModalOpen = false"
       @save="handleSaveNewMeal"
     />
+
+    <!-- Modal: Confirm Day Creation -->
+    <ModalSheet
+      :show="isCreateDayModalOpen"
+      title="Створення дня"
+      @close="closeCreateDayModal"
+    >
+      <div class="confirm-create-day-body">
+        <p class="confirm-create-day-text">
+          Створити раціон на {{ formatModalDate(currentDate) }}? Для нього буде зарезервовано продукти.
+        </p>
+
+        <div class="confirm-modal-actions">
+          <button
+            type="button"
+            class="btn btn-primary btn-full"
+            :disabled="creatingDay"
+            @click="handleCreateDay"
+          >
+            <span v-if="creatingDay" class="spinner-sm"></span>
+            <span>{{ creatingDay ? 'Створення…' : 'Створити раціон' }}</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary btn-full"
+            :disabled="creatingDay"
+            @click="closeCreateDayModal"
+          >
+            Скасувати
+          </button>
+        </div>
+      </div>
+    </ModalSheet>
   </div>
 </template>
 
 <style scoped>
 .menu-view {
   padding-bottom: var(--space-20);
+}
+
+.create-day-banner {
+  margin-bottom: var(--space-12);
+  padding: var(--space-16);
+  border-color: rgba(99, 102, 241, 0.3);
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.08) 0%, var(--surface) 100%);
+}
+
+.create-day-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+}
+
+.create-day-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  min-width: 220px;
+}
+
+.create-day-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.create-day-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.create-day-desc {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.create-day-btn {
+  min-height: 44px;
+  padding: 0 var(--space-20);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.create-day-action-area {
+  margin-top: var(--space-8);
+}
+
+.create-day-full-btn {
+  min-height: 48px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.confirm-create-day-body {
+  padding: var(--space-8) 0;
+}
+
+.confirm-create-day-text {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  margin-bottom: var(--space-24);
+}
+
+.confirm-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
 }
 
 .add-meal-btn {

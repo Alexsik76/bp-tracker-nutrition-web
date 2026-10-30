@@ -6,6 +6,7 @@ import {
   formatLocalDate,
   addDays,
   nowLocalIso,
+  isAfterToday,
 } from '../utils/date';
 import type {
   MenuRead,
@@ -44,6 +45,18 @@ export function useDayMenu() {
   const currentDate = ref(formatLocalDate());
   const menus = ref<MenuRead[]>([]);
   const loading = ref(true);
+  const dayCreated = ref(true);
+  const creatingDay = ref(false);
+  const isCreateDayModalOpen = ref(false);
+
+  function openCreateDayModal() {
+    isCreateDayModalOpen.value = true;
+  }
+
+  function closeCreateDayModal() {
+    isCreateDayModalOpen.value = false;
+  }
+
   const canGenerateDay = ref(true);
   const dayGenerationReplacesManual = ref(false);
   const generatingDay = ref(false);
@@ -138,12 +151,14 @@ export function useDayMenu() {
     rationale.value = '';
     shoppingList.value = [];
     noteAnswer.value = null;
+    isCreateDayModalOpen.value = false;
 
     try {
-      const res = await nutritionApi.getDayMenus(currentDate.value);
+      const res = await nutritionApi.getDayMenus(currentDate.value, nowLocalIso());
       if (res) {
         notifyStockWarnings(res.stock_warnings);
         menus.value = res.menus || [];
+        dayCreated.value = res.day_created ?? true;
         dayKcalIncomplete.value = res.kcal_incomplete !== undefined
           ? res.kcal_incomplete
           : (res.menus || []).some((m) => m.kcal_incomplete);
@@ -154,11 +169,16 @@ export function useDayMenu() {
         if (res.off_plan) {
           offPlanEntries.value = res.off_plan;
         }
+
+        if (res.day_created === false && isAfterToday(currentDate.value)) {
+          isCreateDayModalOpen.value = true;
+        }
       } else {
         menus.value = [];
+        dayCreated.value = false;
         availablePins.value = [];
         dayKcalIncomplete.value = false;
-        canGenerateDay.value = true;
+        canGenerateDay.value = false;
         dayGenerationReplacesManual.value = false;
         savedNotes.value = [];
         if (offPlanSupported.value) {
@@ -177,13 +197,50 @@ export function useDayMenu() {
     }
   }
 
+  // Create Day Menu (reserving products)
+  async function handleCreateDay(): Promise<boolean> {
+    creatingDay.value = true;
+    try {
+      const res = await nutritionApi.createDay(currentDate.value, nowLocalIso());
+      if (res) {
+        notifyStockWarnings(res.stock_warnings);
+        menus.value = res.menus || [];
+        dayCreated.value = res.day_created ?? true;
+        dayKcalIncomplete.value = res.kcal_incomplete !== undefined
+          ? res.kcal_incomplete
+          : (res.menus || []).some((m) => m.kcal_incomplete);
+        canGenerateDay.value = res.can_generate_day ?? true;
+        dayGenerationReplacesManual.value = res.day_generation_replaces_manual ?? false;
+        availablePins.value = res.available_pins || [];
+        savedNotes.value = res.notes || [];
+        if (res.off_plan) {
+          offPlanEntries.value = res.off_plan;
+        }
+      }
+      isCreateDayModalOpen.value = false;
+      toastStore.show('Раціон на день створено', 'success');
+      return true;
+    } catch (err: unknown) {
+      console.error('Day creation error:', err);
+      if (err instanceof ApiError && err.status === 409) {
+        toastStore.show(getErrorMessage(err, 'День вже створено'), 'warning');
+        await loadMenu();
+      } else {
+        toastStore.show(err instanceof Error ? err.message : 'Помилка створення дня', 'error');
+      }
+      return false;
+    } finally {
+      creatingDay.value = false;
+    }
+  }
+
   watch(currentDate, () => {
     loadMenu();
   });
 
   // Generate Full Day Menu
   async function handleGenerateDay() {
-    if (!canGenerateDay.value) return;
+    if (!canGenerateDay.value || !dayCreated.value) return;
 
     if (dayGenerationReplacesManual.value) {
       if (!confirm('Перегенерувати меню? Додані вручну позиції буде замінено.')) {
@@ -218,6 +275,7 @@ export function useDayMenu() {
 
   // Generate or Regenerate Single Slot
   async function handleGenerateSlot(slotName: MealType) {
+    if (!dayCreated.value) return;
     generatingSlot.value = slotName;
     startGenerationStages();
     try {
@@ -269,6 +327,7 @@ export function useDayMenu() {
 
   // Delete whole meal from this day after confirmation
   async function handleDeleteMeal(menu: MenuRead) {
+    if (!dayCreated.value) return;
     if (menu.status === 'eaten') {
       toastStore.show('Не можна видалити зʼїдений прийом (спочатку зніміть позначку «з\'їдено»)', 'warning');
       return;
@@ -299,6 +358,7 @@ export function useDayMenu() {
 
   // Restore pinned meal back into this day
   async function handlePinMeal(slot: MealType) {
+    if (!dayCreated.value) return;
     try {
       await nutritionApi.pinMeal(currentDate.value, slot);
       toastStore.show(`Закріплений прийом «${mealTypeLabel(slot)}» відновлено`, 'success');
@@ -315,6 +375,7 @@ export function useDayMenu() {
 
   // Create new meal for this day
   async function handleCreateMeal(payload: MealCreate): Promise<boolean> {
+    if (!dayCreated.value) return false;
     try {
       await nutritionApi.createMeal(currentDate.value, payload);
       toastStore.show(`Прийом «${mealTypeLabel(payload.meal_type)}» успішно додано`, 'success');
@@ -332,6 +393,7 @@ export function useDayMenu() {
   }
 
   async function handleDeleteItem(item: MenuItemRead) {
+    if (!dayCreated.value) return;
     const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === item.id));
     if (parentMenu?.status === 'eaten') {
       toastStore.show('Зʼїдений прийом їжі не можна змінювати (спочатку зніміть позначку «з\'їдено»)', 'warning');
@@ -360,6 +422,7 @@ export function useDayMenu() {
     portionText?: string;
     kcal?: number;
   }) {
+    if (!dayCreated.value) return false;
     try {
       await nutritionApi.addMenuItem(currentDate.value, slot, {
         dish_id: payload.dishId,
@@ -388,6 +451,7 @@ export function useDayMenu() {
     portionText?: string | null;
     kcal?: number | null;
   }) {
+    if (!dayCreated.value) return false;
     const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === itemId));
     if (parentMenu?.status === 'eaten') {
       toastStore.show('Зʼїдений прийом їжі не можна редагувати (спочатку зніміть позначку «з\'їдено»)', 'warning');
@@ -415,7 +479,7 @@ export function useDayMenu() {
   }
 
   async function handleEstimateSlot(slot: MealType) {
-    if (estimatingSlot.value) return;
+    if (!dayCreated.value || estimatingSlot.value) return;
     estimatingSlot.value = slot;
     try {
       await nutritionApi.estimateMenu(currentDate.value, slot);
@@ -435,6 +499,7 @@ export function useDayMenu() {
     portionText?: string | null;
     kcal?: number | null;
   }) {
+    if (!dayCreated.value) return false;
     const parentMenu = menus.value.find((m) => m.items.some((i) => i.id === itemId));
     if (parentMenu?.status === 'eaten') {
       toastStore.show('Зʼїдений прийом їжі не можна замінити (спочатку зніміть позначку «з\'їдено»)', 'warning');
@@ -541,6 +606,12 @@ export function useDayMenu() {
     currentDate,
     menus,
     loading,
+    dayCreated,
+    creatingDay,
+    isCreateDayModalOpen,
+    openCreateDayModal,
+    closeCreateDayModal,
+    handleCreateDay,
     generating,
     generatingDay,
     generatingSlot,

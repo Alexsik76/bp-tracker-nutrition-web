@@ -182,7 +182,7 @@ export interface FrequentDishCookRequest {
 }
 
 export type MenuItemOrigin = 'generated' | 'manual';
-export type MenuStatus = 'planned' | 'incomplete' | 'eaten';
+export type MenuStatus = 'planned' | 'incomplete' | 'eaten' | 'missed';
 export type NutritionSource = 'user' | 'model' | 'computed';
 
 export interface MenuItemRead extends NutritionSet {
@@ -313,6 +313,7 @@ export interface AvailablePin {
 
 export interface DayMenuRead {
   date: string;
+  day_created: boolean;
   menus: MenuRead[];
   notes: MenuNoteRead[];
   off_plan: OffPlanEntryRead[];
