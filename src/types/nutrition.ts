@@ -66,6 +66,7 @@ export interface DishBase {
   pinned_meal_type?: MealType | null;
   nutrition_overridden?: boolean;
   note?: string | null;
+  cooked_weight_g?: number | null;
 }
 
 export interface DishRead extends DishBase, NutritionSet {
@@ -82,6 +83,7 @@ export interface DishCreate extends Partial<NutritionSet> {
   pinned_meal_type?: MealType | null;
   nutrition_overridden?: boolean;
   note?: string | null;
+  cooked_weight_g?: number | null;
   components?: DishComponentCreate[];
 }
 
@@ -91,6 +93,7 @@ export interface DishUpdate extends Partial<NutritionSet> {
   pinned_meal_type?: MealType | null;
   nutrition_overridden?: boolean | null;
   note?: string | null;
+  cooked_weight_g?: number | null;
   components?: DishComponentCreate[];
   reset_nutrition?: boolean;
 }

@@ -192,6 +192,7 @@ interface CardFormState {
   protein_g: number | null;
   fat_g: number | null;
   carbs_g: number | null;
+  cooked_weight_g: number | null;
   note: string;
   components: DishComponentCreate[];
 }
@@ -202,6 +203,7 @@ const cardForm = ref<CardFormState>({
   protein_g: null,
   fat_g: null,
   carbs_g: null,
+  cooked_weight_g: null,
   note: '',
   components: [],
 });
@@ -224,8 +226,19 @@ function normalizeNutrition(val: number | null | undefined | string): number | n
   return Number.isNaN(num) ? null : num;
 }
 
+function normalizeCookedWeight(val: number | null | undefined | string): number | null {
+  if (val === '' || val === null || val === undefined) return null;
+  const num = typeof val === 'number' ? val : parseFloat(val);
+  return Number.isNaN(num) || num <= 0 ? null : num;
+}
+
 const pinnedPortionText = computed(() => {
   if (!activeDish.value?.pinned_meal_type) return '';
+  const cw = normalizeCookedWeight(cardForm.value.cooked_weight_g);
+  if (cw != null && cw > 0) {
+    const n = Number.isInteger(cw) ? cw : Math.round(cw * 10) / 10;
+    return `Порція: ${n} г (вага готової страви)`;
+  }
   const comps = cardForm.value.components;
   if (!comps || comps.length === 0) {
     return 'Порція: 100 г — склад не вказано';
@@ -234,8 +247,11 @@ const pinnedPortionText = computed(() => {
     const w = Number(c.weight_g);
     return acc + (Number.isFinite(w) && w > 0 ? w : 0);
   }, 0);
-  const n = Number.isInteger(sum) ? sum : Math.round(sum * 10) / 10;
-  return `Порція: ${n} г (сума складу)`;
+  if (sum > 0) {
+    const n = Number.isInteger(sum) ? sum : Math.round(sum * 10) / 10;
+    return `Порція: ${n} г (сума складу)`;
+  }
+  return 'Порція: 100 г — склад не вказано';
 });
 
 function openDishCard(dish: DishRead) {
@@ -252,6 +268,7 @@ function openDishCard(dish: DishRead) {
     protein_g: dish.protein_g,
     fat_g: dish.fat_g,
     carbs_g: dish.carbs_g,
+    cooked_weight_g: dish.cooked_weight_g ?? null,
     note: dish.note || '',
     components: (dish.components || []).map((c) => ({
       product_id: c.product_id,
@@ -286,6 +303,9 @@ async function handleReestimate() {
     cardForm.value.protein_g = updated.protein_g;
     cardForm.value.fat_g = updated.fat_g;
     cardForm.value.carbs_g = updated.carbs_g;
+    if (updated.cooked_weight_g !== undefined) {
+      cardForm.value.cooked_weight_g = updated.cooked_weight_g ?? null;
+    }
 
     loadedNutrition.value = {
       kcal: updated.kcal,
@@ -319,6 +339,7 @@ async function handleSaveCard() {
       name: cardForm.value.name.trim(),
       note: cardForm.value.note.trim() || null,
       components: cardForm.value.components,
+      cooked_weight_g: normalizeCookedWeight(cardForm.value.cooked_weight_g),
     };
 
     if (nutritionChanged) {
@@ -716,6 +737,22 @@ onMounted(() => {
 
         <!-- Optional Composition -->
         <DishComponentsEditor v-model="cardForm.components" />
+
+        <div class="form-group">
+          <label class="form-label" for="cardDishCookedWeight">Вага готової страви, г</label>
+          <input
+            id="cardDishCookedWeight"
+            v-model.number="cardForm.cooked_weight_g"
+            type="number"
+            step="1"
+            min="0"
+            class="form-input num-mono"
+            placeholder="г"
+          />
+          <p class="field-hint">
+            Заповніть, якщо під час приготування додається вода або вага змінюється
+          </p>
+        </div>
 
         <div class="card-modal-actions">
           <button
