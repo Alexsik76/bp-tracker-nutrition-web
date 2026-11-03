@@ -454,8 +454,8 @@ const eatenMeals = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-4) var(--space-0);
+  border-bottom: var(--border-width-base) solid var(--color-border);
 }
 
 .btn-date-nav {
@@ -469,7 +469,7 @@ const eatenMeals = computed(() => {
   color: var(--color-text-secondary);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .btn-date-nav:hover:not(:disabled) {
@@ -499,7 +499,7 @@ const eatenMeals = computed(() => {
 
 .hidden-date-picker {
   position: absolute;
-  inset: 0;
+  inset: var(--space-0);
   opacity: 0;
   cursor: pointer;
   width: 100%;
@@ -513,7 +513,7 @@ const eatenMeals = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-10);
-  border: 1px solid var(--color-border);
+  border: var(--border-width-base) solid var(--color-border);
 }
 
 .summary-totals-row {
@@ -567,7 +567,7 @@ const eatenMeals = computed(() => {
   cursor: pointer;
   border: none;
   line-height: var(--leading-none);
-  transition: transform 0.1s ease;
+  transition: transform var(--transition-fast);
 }
 
 .eval-chip:active {
@@ -620,7 +620,7 @@ const eatenMeals = computed(() => {
 /* Meals List */
 .empty-journal-msg {
   text-align: center;
-  padding: var(--space-28) 0;
+  padding: var(--space-28) var(--space-0);
   color: var(--color-text-muted);
   font-size: var(--font-size-base);
 }
@@ -629,7 +629,7 @@ const eatenMeals = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-12);
-  max-height: 55vh;
+  max-height: var(--journal-list-max-height);
   overflow-y: auto;
   padding-right: var(--space-2);
 }
@@ -638,7 +638,7 @@ const eatenMeals = computed(() => {
   background: var(--color-surface);
   border-radius: var(--radius-card);
   padding: var(--space-14) var(--space-16);
-  border: 1px solid var(--color-border);
+  border: var(--border-width-base) solid var(--color-border);
   display: flex;
   flex-direction: column;
   gap: var(--space-10);
@@ -685,7 +685,7 @@ const eatenMeals = computed(() => {
   justify-content: center;
   padding: var(--space-4);
   border-radius: var(--radius-sm);
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .btn-delete-meal:hover {
@@ -721,7 +721,7 @@ const eatenMeals = computed(() => {
   gap: var(--space-4);
   padding: var(--space-2) var(--space-6);
   border-radius: var(--radius-sm);
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .item-portion-btn:hover {
@@ -738,9 +738,9 @@ const eatenMeals = computed(() => {
 .grams-input {
   width: var(--space-48);
   height: var(--btn-height-xs);
-  padding: 0 var(--space-4);
+  padding: var(--space-0) var(--space-4);
   background: var(--color-bg);
-  border: 1px solid var(--color-primary);
+  border: var(--border-width-base) solid var(--color-primary);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
   font-size: var(--font-size-sub);
@@ -777,7 +777,7 @@ const eatenMeals = computed(() => {
 }
 
 .meal-footer {
-  border-top: 1px solid var(--color-border);
+  border-top: var(--border-width-base) solid var(--color-border);
   padding-top: var(--space-8);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
@@ -788,7 +788,7 @@ const eatenMeals = computed(() => {
 /* Explanation Overlay */
 .explanation-backdrop {
   position: fixed;
-  inset: 0;
+  inset: var(--space-0);
   background: var(--color-scrim);
   z-index: 300;
   display: flex;
@@ -799,7 +799,7 @@ const eatenMeals = computed(() => {
 
 .explanation-card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border-strong);
+  border: var(--border-width-base) solid var(--color-border-strong);
   border-radius: var(--radius-card);
   padding: var(--space-16);
   max-width: var(--screen-max-width);

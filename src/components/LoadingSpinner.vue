@@ -32,14 +32,14 @@ const props = withDefaults(
 }
 
 .spinner {
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  border: var(--spinner-border-width) solid var(--color-spinner-track);
   border-top-color: var(--primary);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin var(--spinner-duration) linear infinite;
 }
 
 .spinner-text {
-  font-size: 13px;
+  font-size: var(--font-size-sub);
   color: var(--text-muted);
 }
 

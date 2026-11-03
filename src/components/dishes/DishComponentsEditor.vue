@@ -17,7 +17,7 @@ onMounted(async () => {
 
 function addComponentRow() {
   components.value.push({
-    product_id: null,
+    product_id: products.value.length > 0 ? products.value[0].id : null,
     new_product: null,
     weight_g: 100,
   });
@@ -26,7 +26,7 @@ function addComponentRow() {
 function addNewProductRow() {
   components.value.push({
     product_id: null,
-    new_product: { name: '', stock_g: null },
+    new_product: { name: '', available: true, note: null },
     weight_g: 100,
   });
 }
@@ -36,7 +36,7 @@ function removeComponentRow(index: number) {
 }
 
 function switchToNew(comp: DishComponentCreate) {
-  comp.new_product = { name: '', stock_g: null };
+  comp.new_product = { name: '', available: true, note: null };
   comp.product_id = null;
 }
 
@@ -49,7 +49,7 @@ function switchToExisting(comp: DishComponentCreate) {
 <template>
   <div class="components-editor">
     <div class="section-header">
-      <span class="section-title">Складники страви</span>
+      <span class="section-title">Складники страви (необов'язково)</span>
       <div class="header-actions">
         <button type="button" class="btn-text-action" @click="addComponentRow">
           + Зі списку
@@ -81,7 +81,6 @@ function switchToExisting(comp: DishComponentCreate) {
               <option :value="null" disabled>-- Оберіть продукт --</option>
               <option v-for="p in products" :key="p.id" :value="p.id">
                 {{ p.name }}
-                <template v-if="p.stock_g !== null"> (запас: {{ p.stock_g }} г)</template>
               </option>
             </select>
             <button
@@ -97,20 +96,13 @@ function switchToExisting(comp: DishComponentCreate) {
 
         <!-- New inline product -->
         <template v-else>
-          <div class="comp-input-group new-prod-group">
+          <div class="comp-input-group">
             <input
               v-model="comp.new_product.name"
               type="text"
               class="form-input comp-name-input"
               placeholder="Назва продукту"
               required
-            />
-            <input
-              v-model.number="comp.new_product.stock_g"
-              type="number"
-              class="form-input comp-stock-input num-mono"
-              placeholder="Запас (г)"
-              min="0"
             />
             <button
               type="button"
@@ -165,9 +157,9 @@ function switchToExisting(comp: DishComponentCreate) {
 }
 
 .section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 
 .header-actions {
@@ -178,107 +170,121 @@ function switchToExisting(comp: DishComponentCreate) {
 .btn-text-action {
   background: transparent;
   border: none;
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  padding: 0;
+  padding: var(--space-0);
+  transition: opacity var(--transition-fast);
 }
 
 .btn-text-action:hover {
   text-decoration: underline;
+  opacity: 0.9;
 }
 
 .no-comps-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: var(--space-8) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-8) var(--space-0);
 }
 
 .comp-edit-card {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--surface-border);
+  background: var(--color-subtle-card-bg);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-control);
-  padding: 6px var(--space-8);
-  margin-bottom: 6px;
+  padding: var(--space-6) var(--space-8);
+  margin-bottom: var(--space-6);
 }
 
 .comp-edit-main {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .comp-input-group {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.new-prod-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .comp-select {
   flex: 1;
-  min-height: 38px;
-  font-size: 13px;
+  min-height: var(--btn-height-sm);
+  font-size: var(--font-size-sub);
+  background-color: var(--color-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: var(--space-0) var(--space-8);
 }
 
 .comp-name-input {
-  flex: 2;
-  min-height: 38px;
-  font-size: 13px;
-}
-
-.comp-stock-input {
-  width: 90px;
-  min-height: 38px;
-  font-size: 12px;
+  flex: 1;
+  min-height: var(--btn-height-sm);
+  font-size: var(--font-size-sub);
+  background-color: var(--color-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: var(--space-0) var(--space-8);
 }
 
 .btn-toggle-mode {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--surface-border);
+  background: var(--color-btn-outline-hover-bg);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-pill);
-  color: var(--text-dim);
-  font-size: 11px;
-  padding: 4px 8px;
+  color: var(--color-text-dim);
+  font-size: var(--font-size-xs);
+  padding: var(--space-4) var(--space-8);
   cursor: pointer;
   white-space: nowrap;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .btn-toggle-mode:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+  background: var(--color-pill-hover-bg);
 }
 
 .comp-weight-group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
 }
 
 .comp-w-input {
-  width: 70px;
-  min-height: 38px;
-  padding: 4px 6px;
-  font-size: 13px;
+  width: var(--input-width-grams);
+  min-height: var(--btn-height-sm);
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--font-size-sub);
   text-align: right;
+  background-color: var(--color-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
 }
 
 .weight-unit {
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 .del-comp-btn {
-  min-width: 34px;
-  min-height: 34px;
-  color: var(--text-dim);
+  min-width: var(--btn-size-icon);
+  min-height: var(--btn-size-icon);
+  padding: var(--space-0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-dim);
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast);
 }
 
 .del-comp-btn:hover {

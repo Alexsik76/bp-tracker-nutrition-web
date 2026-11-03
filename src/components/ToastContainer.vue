@@ -44,11 +44,11 @@ const toastStore = useToastStore();
 .toast-container {
   position: fixed;
   top: calc(var(--space-16) + var(--safe-area-top));
-  left: 0;
-  right: 0;
-  margin: 0 auto;
-  max-width: 440px;
-  padding: 0 var(--space-16);
+  left: var(--space-0);
+  right: var(--space-0);
+  margin: var(--space-0) auto;
+  max-width: var(--toast-max-width);
+  padding: var(--space-0) var(--space-16);
   z-index: 300;
   display: flex;
   flex-direction: column;
@@ -63,35 +63,35 @@ const toastStore = useToastStore();
   gap: var(--space-12);
   padding: var(--space-12) var(--space-16);
   border-radius: var(--radius-control);
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--toast-font-size);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-toast);
+  backdrop-filter: blur(var(--blur-toast));
 }
 
 .toast-success {
-  background-color: #14281E;
-  color: #4ADE80;
-  border: 1px solid rgba(74, 222, 128, 0.25);
+  background-color: var(--color-toast-success-bg);
+  color: var(--color-toast-success-text);
+  border: var(--border-width-base) solid var(--color-toast-success-border);
 }
 
 .toast-warning {
-  background-color: #2D1D10;
-  color: #FB923C;
-  border: 1px solid rgba(251, 146, 60, 0.25);
+  background-color: var(--color-toast-warning-bg);
+  color: var(--color-toast-warning-text);
+  border: var(--border-width-base) solid var(--color-toast-warning-border);
 }
 
 .toast-danger, .toast-error {
-  background-color: #2D1214;
-  color: #F87171;
-  border: 1px solid rgba(248, 113, 113, 0.25);
+  background-color: var(--color-toast-error-bg);
+  color: var(--color-toast-error-text);
+  border: var(--border-width-base) solid var(--color-toast-error-border);
 }
 
 .toast-info {
-  background-color: #112033;
-  color: #38BDF8;
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background-color: var(--color-toast-info-bg);
+  color: var(--color-toast-info-text);
+  border: var(--border-width-base) solid var(--color-toast-info-border);
 }
 
 .toast-icon {
@@ -105,16 +105,16 @@ const toastStore = useToastStore();
 }
 
 .toast-enter-active, .toast-leave-active {
-  transition: all 0.25s ease;
+  transition: all var(--transition-normal);
 }
 
 .toast-enter-from {
   opacity: 0;
-  transform: translateY(-16px) scale(0.95);
+  transform: translateY(calc(-1 * var(--space-16))) scale(0.95);
 }
 
 .toast-leave-to {
   opacity: 0;
-  transform: translateY(-8px) scale(0.95);
+  transform: translateY(calc(-1 * var(--space-8))) scale(0.95);
 }
 </style>

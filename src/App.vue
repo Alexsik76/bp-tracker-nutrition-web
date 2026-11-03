@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import BottomNavBar from './components/BottomNavBar.vue';
 import ToastContainer from './components/ToastContainer.vue';
 
 const route = useRoute();
 
 const isMainScreen = computed(() => {
   return route.path === '/' || route.path === '/menu';
-});
-
-const showBottomNav = computed(() => {
-  return !isMainScreen.value && route.name !== 'login' && route.path !== '/login';
 });
 </script>
 
@@ -21,7 +16,6 @@ const showBottomNav = computed(() => {
     <main class="app-content" :class="{ 'main-screen-layout': isMainScreen }">
       <router-view />
     </main>
-    <BottomNavBar v-if="showBottomNav" />
   </div>
 </template>
 
@@ -30,7 +24,7 @@ const showBottomNav = computed(() => {
   padding: 0;
   padding-bottom: var(--safe-area-bottom);
   overflow: hidden;
-  height: 100vh;
+  height: var(--screen-min-height);
   display: flex;
   flex-direction: column;
 }

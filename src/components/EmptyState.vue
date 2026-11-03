@@ -45,9 +45,9 @@ defineEmits<{
   justify-content: center;
   text-align: center;
   padding: var(--space-28) var(--space-16);
-  border: 1px dashed var(--surface-border);
+  border: var(--border-width-base) dashed var(--surface-border);
   border-radius: var(--radius-card);
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--color-subtle-card-bg);
   margin-bottom: var(--space-16);
 }
 
@@ -60,18 +60,18 @@ defineEmits<{
 }
 
 .empty-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   margin-bottom: var(--space-4);
 }
 
 .empty-desc {
-  font-size: 13.5px;
+  font-size: var(--font-size-sub-md);
   color: var(--text-muted);
-  max-width: 280px;
+  max-width: var(--empty-state-max-width);
   margin-bottom: var(--space-16);
-  line-height: 1.4;
+  line-height: var(--leading-normal);
 }
 
 .empty-action {

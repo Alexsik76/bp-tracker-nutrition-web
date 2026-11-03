@@ -1,6 +1,3 @@
-export type ProductAvailability = 'in_stock' | 'low' | 'out';
-export type ProductPreference = 'preferred' | 'neutral' | 'avoid';
-
 export interface NutritionSet {
   kcal: number | null;
   protein_g: number | null;
@@ -11,41 +8,26 @@ export interface NutritionSet {
   sodium_mg: number | null;
 }
 
-export interface ProductRead extends NutritionSet {
+export interface ProductRead {
   id: string;
   user_id: string;
   name: string;
-  available?: boolean;
-  note?: string | null;
-  availability: ProductAvailability;
-  preference: ProductPreference;
-  eat_raw: boolean;
-  count: number | null;
-  stock_g: number | null;
+  available: boolean;
+  note: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface ProductCreate extends Partial<NutritionSet> {
+export interface ProductCreate {
   name: string;
   available?: boolean;
   note?: string | null;
-  availability?: ProductAvailability;
-  preference?: ProductPreference;
-  eat_raw?: boolean;
-  count?: number | null;
-  stock_g?: number | null;
 }
 
-export interface ProductUpdate extends Partial<NutritionSet> {
+export interface ProductUpdate {
   name?: string;
   available?: boolean;
   note?: string | null;
-  availability?: ProductAvailability;
-  preference?: ProductPreference;
-  eat_raw?: boolean;
-  count?: number | null;
-  stock_g?: number | null;
 }
 
 export type MealType =
@@ -60,31 +42,6 @@ export interface NewProductInput {
   name: string;
   available?: boolean;
   note?: string | null;
-  stock_g?: number | null;
-}
-
-export interface NewRecipeInput {
-  name: string;
-}
-
-export interface RecipeRead {
-  id: string;
-  user_id: string;
-  name: string;
-  archived: boolean;
-  created_at: string;
-  updated_at: string;
-  product_ids: string[];
-}
-
-export interface RecipeCreate {
-  name: string;
-  product_ids?: string[];
-}
-
-export interface RecipeUpdate {
-  name?: string;
-  archived?: boolean;
 }
 
 export interface DishComponentBase {
@@ -114,87 +71,27 @@ export interface DishBase {
 export interface DishRead extends DishBase, NutritionSet {
   id: string;
   user_id: string;
-  recipe_id?: string;
-  cooked_weight_g?: number;
-  remaining_g?: number;
-  cooked_on?: string | null;
-  notes?: string | null;
   created_at: string;
   updated_at: string;
   components: DishComponentRead[];
 }
 
 export interface DishCreate extends Partial<NutritionSet> {
-  name?: string;
-  recipe_id?: string | null;
-  new_recipe?: NewRecipeInput | null;
-  cooked_weight_g?: number;
-  remaining_g?: number | null;
-  cooked_on?: string | null;
-  notes?: string | null;
-  note?: string | null;
+  name: string;
   is_ready?: boolean;
   pinned_meal_type?: MealType | null;
   nutrition_overridden?: boolean;
+  note?: string | null;
   components?: DishComponentCreate[];
 }
 
 export interface DishUpdate extends Partial<NutritionSet> {
   name?: string;
-  cooked_weight_g?: number | null;
-  remaining_g?: number | null;
-  cooked_on?: string | null;
-  notes?: string | null;
-  note?: string | null;
   is_ready?: boolean | null;
   pinned_meal_type?: MealType | null;
   nutrition_overridden?: boolean | null;
+  note?: string | null;
   components?: DishComponentCreate[];
-}
-
-export interface FrequentDishComponentBase {
-  product_id: string;
-  weight_g: number;
-}
-
-export interface FrequentDishComponentRead extends FrequentDishComponentBase {
-  id: string;
-  frequent_dish_id: string;
-}
-
-export interface FrequentDishComponentCreate {
-  product_id?: string | null;
-  new_product?: NewProductInput | null;
-  weight_g: number;
-}
-
-export interface FrequentDishRead extends NutritionSet {
-  id: string;
-  user_id: string;
-  recipe_id: string;
-  recipe_name: string;
-  cooked_weight_g: number;
-  nutrition_overridden: boolean;
-  created_at: string;
-  updated_at: string;
-  components: FrequentDishComponentRead[];
-}
-
-export interface FrequentDishCreate extends Partial<NutritionSet> {
-  recipe_id: string;
-  cooked_weight_g: number;
-  components?: FrequentDishComponentCreate[];
-}
-
-export interface FrequentDishUpdate extends Partial<NutritionSet> {
-  recipe_id?: string;
-  cooked_weight_g?: number;
-  components?: FrequentDishComponentCreate[];
-  reset_nutrition?: boolean;
-}
-
-export interface FrequentDishCookRequest {
-  cooked_on: string; // YYYY-MM-DD
 }
 
 export type MenuOrigin = 'suggestion' | 'manual' | 'pinned';

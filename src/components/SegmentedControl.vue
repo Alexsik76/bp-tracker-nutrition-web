@@ -42,53 +42,54 @@ function select(value: any) {
 <style scoped>
 .segmented-control {
   display: flex;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--surface-border);
+  background-color: var(--color-surface-elevated);
+  border: var(--border-width-hairline) solid var(--color-border);
   border-radius: var(--radius-pill);
-  padding: 3px;
-  gap: 3px;
+  padding: var(--space-3);
+  gap: var(--space-3);
   width: 100%;
 }
 
 .segment-btn {
   flex: 1;
-  min-height: 42px;
+  min-height: var(--btn-height-sm);
   border-radius: var(--radius-pill);
   border: none;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 13.5px;
-  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-8);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   user-select: none;
-  padding: 0 var(--space-12);
+  padding: var(--space-0) var(--space-12);
 }
 
 .segment-btn.active {
-  background-color: rgba(129, 140, 248, 0.22);
-  color: #FFFFFF;
+  background-color: var(--color-primary-chip);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
 }
 
 .segment-btn:not(.active):hover {
-  color: var(--text-primary);
-  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+  background-color: var(--color-segment-hover-bg);
 }
 
 .segment-count {
-  font-size: 11.5px;
-  padding: 1px 7px;
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) var(--space-7);
   border-radius: var(--radius-pill);
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
+  background-color: var(--color-segment-count-bg);
+  color: var(--color-text-primary);
 }
 
 .segment-btn.active .segment-count {
-  background-color: var(--primary);
-  color: var(--on-primary);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
 }
 </style>

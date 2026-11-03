@@ -26,6 +26,31 @@
   --color-btn-outline-text: #c2c6d2;
   --color-btn-outline-hover-bg: rgba(255, 255, 255, 0.05);
 
+  /* Subtle Surfaces & Transparency */
+  --color-subtle-card-bg: rgba(255, 255, 255, 0.02);
+  --color-row-active-bg: rgba(255, 255, 255, 0.03);
+  --color-segment-hover-bg: rgba(255, 255, 255, 0.04);
+  --color-pill-hover-bg: rgba(255, 255, 255, 0.08);
+  --color-segment-count-bg: rgba(255, 255, 255, 0.1);
+  --color-spinner-track: rgba(255, 255, 255, 0.1);
+  --color-drag-indicator: rgba(255, 255, 255, 0.2);
+  --color-modal-backdrop: rgba(0, 0, 0, 0.75);
+  --color-danger-border: rgba(239, 68, 68, 0.25);
+
+  /* Toast Notification Palette */
+  --color-toast-success-bg: #14281e;
+  --color-toast-success-text: #4ade80;
+  --color-toast-success-border: rgba(74, 222, 128, 0.25);
+  --color-toast-warning-bg: #2d1d10;
+  --color-toast-warning-text: #fb923c;
+  --color-toast-warning-border: rgba(251, 146, 60, 0.25);
+  --color-toast-error-bg: #2d1214;
+  --color-toast-error-text: #f87171;
+  --color-toast-error-border: rgba(248, 113, 113, 0.25);
+  --color-toast-info-bg: #112033;
+  --color-toast-info-text: #38bdf8;
+  --color-toast-info-border: rgba(56, 189, 248, 0.25);
+
   /* Evaluator semantic levels */
   --color-eval-green: #91d68b;
   --color-eval-green-bg: rgba(145, 214, 139, 0.16);
@@ -92,6 +117,7 @@
   --radius-card: 16px;
   --radius-pill: 22px;
   --radius-btn: 24px;
+  --radius-sheet: 24px;
   --radius-container: 28px;
   --radius-full: 9999px;
 
@@ -102,12 +128,16 @@
   --font-size-xs: 11px;
   --font-size-sm: 12px;
   --font-size-sub: 13px;
+  --font-size-sub-md: 13.5px;
   --font-size-input: 14px;
   --font-size-base: 15px;
   --font-size-md: 16px;
+  --font-size-title: 17px;
   --font-size-lg: 18px;
   --font-size-xl: 20px;
+  --font-size-display-sm: 22px;
   --font-size-2xl: 24px;
+  --toast-font-size: 13.5px;
 
   --font-weight-regular: 400;
   --font-weight-medium: 500;
@@ -123,11 +153,46 @@
   --status-bar-height: 3px;
   --btn-height-primary: 48px;
   --btn-height-secondary: 44px;
+  --btn-height-input: 38px;
   --btn-height-sm: 36px;
   --btn-height-xs: 28px;
+  --btn-size-icon: 32px;
+  --avatar-size: 40px;
+  --logo-size: 56px;
+  --input-width-grams: 68px;
   --input-height-bottom: 44px;
   --textarea-min-height: 150px;
   --dropdown-min-width: 160px;
+  --login-card-max-width: 400px;
+  --empty-state-max-width: 280px;
+  --toast-max-width: 440px;
+
+  /* Switch Dimensions */
+  --switch-width: 32px;
+  --switch-height: 18px;
+  --switch-radius: 9px;
+  --switch-knob-size: 13px;
+  --switch-knob-top: 1.5px;
+  --switch-knob-left: 2px;
+  --switch-knob-offset: 13px;
+
+  /* Slider Dimensions */
+  --slider-track-height: 6px;
+  --slider-thumb-size: 20px;
+  --slider-thumb-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+
+  /* FAB Dimensions */
+  --fab-size: 52px;
+  --fab-radius: 16px;
+  --fab-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  /* Modal Sheet */
+  --sheet-drag-width: 36px;
+  --sheet-drag-height: 4px;
+
+  /* Spinner */
+  --spinner-border-width: 3px;
+  --spinner-duration: 0.8s;
 
   --dot-active-width: 18px;
   --dot-inactive-width: 6px;
@@ -147,6 +212,8 @@
   /* Transitions */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
+  --transition-fade: 0.2s ease;
+  --transition-sheet: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Touch & Screen Dimensions */
   --touch-target-min: 44px;
@@ -154,14 +221,20 @@
   --screen-min-height: 100vh;
   --screen-phone-width: 390px;
   --screen-phone-height: 844px;
+  --modal-max-height: 90vh;
+  --journal-list-max-height: 55vh;
 
   /* Overlays & Typography details */
   --color-scrim: rgba(0, 0, 0, 0.6);
   --letter-spacing-label: 0.05em;
+  --letter-spacing-caps: 0.08em;
+  --blur-modal: 4px;
+  --blur-toast: 8px;
 
   /* Shadows */
   --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.45);
   --shadow-modal: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.4);
 
   /* Safe Area */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
