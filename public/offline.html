@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="uk" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Немає зв'язку — Меню здоров'я</title>
+  <meta name="theme-color" content="#111418">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #111418;
+      color: #e2e2e9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+    .offline-card {
+      background-color: #1c2027;
+      border: 1px solid #2a2f38;
+      border-radius: 16px;
+      padding: 32px 24px;
+      max-width: 400px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    .offline-icon {
+      width: 56px;
+      height: 56px;
+      color: #9fc0ea;
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #e2e2e9;
+    }
+    p {
+      font-size: 0.95rem;
+      color: #8b909b;
+      line-height: 1.5;
+    }
+    .reload-btn {
+      margin-top: 8px;
+      background-color: #9fc0ea;
+      color: #0a2440;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+      width: 100%;
+      max-width: 200px;
+    }
+    .reload-btn:hover,
+    .reload-btn:active {
+      background-color: #b5d2f6;
+    }
+  </style>
+</head>
+<body>
+  <div class="offline-card">
+    <svg class="offline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="1" y1="1" x2="23" y2="23"/>
+      <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+      <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+      <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+      <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+      <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+      <line x1="12" y1="20" x2="12.01" y2="20"/>
+    </svg>
+    <h1>Немає зв'язку</h1>
+    <p>Відсутнє підключення до інтернету. Перевірте мережу та спробуйте ще раз.</p>
+    <button class="reload-btn" onclick="window.location.reload()">Спробувати ще раз</button>
+  </div>
+</body>
+</html>
