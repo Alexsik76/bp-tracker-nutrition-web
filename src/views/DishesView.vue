@@ -159,16 +159,11 @@ function handlePointerMove(e: PointerEvent) {
   }
 }
 
-function handlePointerUp(dish: DishRead) {
+function handlePointerUp() {
   if (longPressTimer !== null) {
     clearTimeout(longPressTimer);
     longPressTimer = null;
   }
-  if (isLongPressTriggered) {
-    isLongPressTriggered = false;
-    return;
-  }
-  openDishCard(dish);
 }
 
 function handlePointerCancel() {
@@ -177,6 +172,14 @@ function handlePointerCancel() {
     longPressTimer = null;
   }
   isLongPressTriggered = false;
+}
+
+function handleRowClick(dish: DishRead) {
+  if (isLongPressTriggered) {
+    isLongPressTriggered = false;
+    return;
+  }
+  openDishCard(dish);
 }
 
 // --- Dish Card Modal Sheet (Edit & Delete) ---
@@ -475,8 +478,9 @@ onMounted(() => {
           role="button"
           @pointerdown="handlePointerDown($event, dish)"
           @pointermove="handlePointerMove"
-          @pointerup="handlePointerUp(dish)"
+          @pointerup="handlePointerUp"
           @pointercancel="handlePointerCancel"
+          @click="handleRowClick(dish)"
           @keydown.enter="openDishCard(dish)"
           @contextmenu.prevent
         >
@@ -517,8 +521,9 @@ onMounted(() => {
           role="button"
           @pointerdown="handlePointerDown($event, dish)"
           @pointermove="handlePointerMove"
-          @pointerup="handlePointerUp(dish)"
+          @pointerup="handlePointerUp"
           @pointercancel="handlePointerCancel"
+          @click="handleRowClick(dish)"
           @keydown.enter="openDishCard(dish)"
           @contextmenu.prevent
         >
@@ -556,8 +561,9 @@ onMounted(() => {
           role="button"
           @pointerdown="handlePointerDown($event, dish)"
           @pointermove="handlePointerMove"
-          @pointerup="handlePointerUp(dish)"
+          @pointerup="handlePointerUp"
           @pointercancel="handlePointerCancel"
+          @click="handleRowClick(dish)"
           @keydown.enter="openDishCard(dish)"
           @contextmenu.prevent
         >
