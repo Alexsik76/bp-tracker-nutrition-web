@@ -92,6 +92,7 @@ export interface DishUpdate extends Partial<NutritionSet> {
   nutrition_overridden?: boolean | null;
   note?: string | null;
   components?: DishComponentCreate[];
+  reset_nutrition?: boolean;
 }
 
 export type MenuOrigin = 'suggestion' | 'manual' | 'pinned';
