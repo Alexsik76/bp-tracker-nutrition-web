@@ -7,7 +7,7 @@ import ModalSheet from '../components/ModalSheet.vue';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 import EmptyState from '../components/EmptyState.vue';
 import DishComponentsEditor from '../components/dishes/DishComponentsEditor.vue';
-import type { DishRead, MealType, DishComponentCreate } from '../types/nutrition';
+import type { DishRead, MealType, DishComponentCreate, DishUpdate } from '../types/nutrition';
 
 const props = withDefaults(
   defineProps<{
@@ -184,6 +184,7 @@ const isCardModalOpen = ref(false);
 const activeDish = ref<DishRead | null>(null);
 const savingCard = ref(false);
 const deletingCard = ref(false);
+const reestimating = ref(false);
 
 interface CardFormState {
   name: string;
@@ -205,8 +206,46 @@ const cardForm = ref<CardFormState>({
   components: [],
 });
 
+const loadedNutrition = ref<{
+  kcal: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  carbs_g: number | null;
+}>({
+  kcal: null,
+  protein_g: null,
+  fat_g: null,
+  carbs_g: null,
+});
+
+function normalizeNutrition(val: number | null | undefined | string): number | null {
+  if (val === '' || val === null || val === undefined) return null;
+  const num = typeof val === 'number' ? val : parseFloat(val);
+  return Number.isNaN(num) ? null : num;
+}
+
+const pinnedPortionText = computed(() => {
+  if (!activeDish.value?.pinned_meal_type) return '';
+  const comps = cardForm.value.components;
+  if (!comps || comps.length === 0) {
+    return 'Порція: 100 г — склад не вказано';
+  }
+  const sum = comps.reduce((acc, c) => {
+    const w = Number(c.weight_g);
+    return acc + (Number.isFinite(w) && w > 0 ? w : 0);
+  }, 0);
+  const n = Number.isInteger(sum) ? sum : Math.round(sum * 10) / 10;
+  return `Порція: ${n} г (сума складу)`;
+});
+
 function openDishCard(dish: DishRead) {
   activeDish.value = dish;
+  loadedNutrition.value = {
+    kcal: dish.kcal,
+    protein_g: dish.protein_g,
+    fat_g: dish.fat_g,
+    carbs_g: dish.carbs_g,
+  };
   cardForm.value = {
     name: dish.name,
     kcal: dish.kcal,
@@ -227,22 +266,70 @@ function closeDishCard() {
   activeDish.value = null;
 }
 
+async function handleReestimate() {
+  if (!activeDish.value || reestimating.value || savingCard.value) return;
+  const dishId = activeDish.value.id;
+  reestimating.value = true;
+
+  try {
+    const updated = await nutritionApi.updateDish(dishId, {
+      reset_nutrition: true,
+    });
+
+    const idx = dishes.value.findIndex((d) => d.id === dishId);
+    if (idx !== -1) {
+      dishes.value[idx] = updated;
+    }
+    activeDish.value = updated;
+
+    cardForm.value.kcal = updated.kcal;
+    cardForm.value.protein_g = updated.protein_g;
+    cardForm.value.fat_g = updated.fat_g;
+    cardForm.value.carbs_g = updated.carbs_g;
+
+    loadedNutrition.value = {
+      kcal: updated.kcal,
+      protein_g: updated.protein_g,
+      fat_g: updated.fat_g,
+      carbs_g: updated.carbs_g,
+    };
+
+    toastStore.show('КБЖВ оцінено заново', 'success');
+  } catch (err: unknown) {
+    console.error('Failed to re-estimate dish nutrition:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка переоцінки КБЖВ', 'error');
+  } finally {
+    reestimating.value = false;
+  }
+}
+
 async function handleSaveCard() {
-  if (!activeDish.value || savingCard.value) return;
+  if (!activeDish.value || savingCard.value || reestimating.value) return;
   const dishId = activeDish.value.id;
   savingCard.value = true;
 
   try {
-    const updated = await nutritionApi.updateDish(dishId, {
+    const nutritionChanged =
+      normalizeNutrition(cardForm.value.kcal) !== normalizeNutrition(loadedNutrition.value.kcal) ||
+      normalizeNutrition(cardForm.value.protein_g) !== normalizeNutrition(loadedNutrition.value.protein_g) ||
+      normalizeNutrition(cardForm.value.fat_g) !== normalizeNutrition(loadedNutrition.value.fat_g) ||
+      normalizeNutrition(cardForm.value.carbs_g) !== normalizeNutrition(loadedNutrition.value.carbs_g);
+
+    const payload: DishUpdate = {
       name: cardForm.value.name.trim(),
-      kcal: cardForm.value.kcal,
-      protein_g: cardForm.value.protein_g,
-      fat_g: cardForm.value.fat_g,
-      carbs_g: cardForm.value.carbs_g,
       note: cardForm.value.note.trim() || null,
       components: cardForm.value.components,
-      nutrition_overridden: true,
-    });
+    };
+
+    if (nutritionChanged) {
+      payload.kcal = normalizeNutrition(cardForm.value.kcal);
+      payload.protein_g = normalizeNutrition(cardForm.value.protein_g);
+      payload.fat_g = normalizeNutrition(cardForm.value.fat_g);
+      payload.carbs_g = normalizeNutrition(cardForm.value.carbs_g);
+      payload.nutrition_overridden = true;
+    }
+
+    const updated = await nutritionApi.updateDish(dishId, payload);
 
     const idx = dishes.value.findIndex((d) => d.id === dishId);
     if (idx !== -1) {
@@ -259,7 +346,7 @@ async function handleSaveCard() {
 }
 
 async function handleDeleteDish() {
-  if (!activeDish.value || deletingCard.value) return;
+  if (!activeDish.value || deletingCard.value || reestimating.value) return;
   if (!confirm(`Видалити страву «${activeDish.value.name}»?`)) return;
 
   const dishId = activeDish.value.id;
@@ -535,8 +622,39 @@ onMounted(() => {
           />
         </div>
 
+        <!-- Pinned dish daily portion -->
+        <div v-if="activeDish?.pinned_meal_type" class="pinned-portion-banner">
+          <svg
+            class="pinned-portion-icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="12" y1="17" x2="12" y2="22"></line>
+            <path d="M5 17h14v-2l-2-2V5a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v8l-2 2v2z"></path>
+          </svg>
+          <span class="pinned-portion-text">{{ pinnedPortionText }}</span>
+        </div>
+
         <div class="form-group">
-          <label class="form-label">КБЖВ на 100 г</label>
+          <div class="nutrition-header">
+            <label class="form-label">КБЖВ на 100 г</label>
+            <button
+              v-if="activeDish?.nutrition_overridden"
+              type="button"
+              class="btn-text-action"
+              :disabled="reestimating || savingCard || deletingCard"
+              @click="handleReestimate"
+            >
+              Оцінити заново
+            </button>
+          </div>
           <div class="nutrition-inputs-grid">
             <div class="nutrition-input-cell">
               <span class="cell-label">Калорії</span>
@@ -603,7 +721,7 @@ onMounted(() => {
           <button
             type="submit"
             class="btn-save-card"
-            :disabled="savingCard"
+            :disabled="savingCard || reestimating"
           >
             <span v-if="!savingCard">Зберегти</span>
             <LoadingSpinner v-else :size="18" />
@@ -611,7 +729,7 @@ onMounted(() => {
           <button
             type="button"
             class="btn-delete-card"
-            :disabled="deletingCard"
+            :disabled="deletingCard || reestimating"
             @click="handleDeleteDish"
           >
             Видалити страву
@@ -895,6 +1013,55 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
+}
+
+.pinned-portion-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  background: var(--color-primary-chip);
+  border: var(--border-width-hairline) solid rgba(159, 192, 234, 0.25);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-sub);
+  color: var(--color-primary);
+  line-height: var(--leading-normal);
+}
+
+.pinned-portion-icon {
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
+.pinned-portion-text {
+  font-weight: var(--font-weight-medium);
+}
+
+.nutrition-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-text-action {
+  background: transparent;
+  border: none;
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  padding: var(--space-0);
+  transition: opacity var(--transition-fast);
+}
+
+.btn-text-action:hover:not(:disabled) {
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+.btn-text-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .form-group {

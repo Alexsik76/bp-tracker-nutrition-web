@@ -300,19 +300,33 @@ export const mockNutritionApi = {
   updateDish: async (dishId: string, data: DishUpdate): Promise<DishRead> => {
     const dish = mockDishes.find((d) => d.id === dishId);
     if (!dish) throw new ApiError('Dish not found', 404);
-    const { components, is_ready, nutrition_overridden, ...rest } = data;
+    const { components, is_ready, nutrition_overridden, reset_nutrition, ...rest } = data;
     const updates: Partial<DishRead> = { ...rest };
     if (is_ready !== null && is_ready !== undefined) {
       updates.is_ready = is_ready;
     }
-    if (nutrition_overridden !== null && nutrition_overridden !== undefined) {
+    if (reset_nutrition) {
+      updates.nutrition_overridden = false;
+      if (dish.components && dish.components.length > 0) {
+        updates.kcal = 150;
+        updates.protein_g = 8;
+        updates.fat_g = 5;
+        updates.carbs_g = 18;
+      } else {
+        updates.kcal = 100;
+        updates.protein_g = 5;
+        updates.fat_g = 3;
+        updates.carbs_g = 12;
+      }
+    } else if (nutrition_overridden !== null && nutrition_overridden !== undefined) {
       updates.nutrition_overridden = nutrition_overridden;
     }
     if (
-      data.kcal !== undefined ||
-      data.protein_g !== undefined ||
-      data.fat_g !== undefined ||
-      data.carbs_g !== undefined
+      !reset_nutrition &&
+      (data.kcal !== undefined ||
+        data.protein_g !== undefined ||
+        data.fat_g !== undefined ||
+        data.carbs_g !== undefined)
     ) {
       updates.nutrition_overridden = true;
     }
