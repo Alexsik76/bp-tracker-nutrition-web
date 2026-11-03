@@ -22,23 +22,14 @@ import type {
   DishCreate,
   DishUpdate,
   MenuRead,
-  MenuUpdate,
-  MealCreate,
   MenuItemRead,
-  MenuItemCreate,
   MenuItemUpdate,
-  GenerationRequest,
-  GenerationResultRead,
+  SuggestionRequest,
+  SuggestionResponse,
+  EatMealRequest,
+  JournalResponse,
   NutritionProfileRead,
   NutritionProfileUpsert,
-  OffPlanEntryRead,
-  OffPlanEntryCreate,
-  MenuNoteRead,
-  MenuNoteCreate,
-  DayMenuRead,
-  PinnedMealRead,
-  PinnedMealUpsert,
-  MealType,
 } from '../types/nutrition';
 
 declare global {
@@ -440,67 +431,28 @@ const realNutritionApi = {
     });
   },
 
-  // Menus
-  getDayMenus: async (menuDate: string, now?: string): Promise<DayMenuRead | null> => {
-    try {
-      const qs = now ? `?now=${encodeURIComponent(now)}` : '';
-      return await request<DayMenuRead>(`/nutrition/menus/${menuDate}${qs}`);
-    } catch (err) {
-      if (isExpectedEmptyStatus(err)) {
-        return null;
-      }
-      throw err;
-    }
-  },
-
-  createDay: async (menuDate: string, now?: string): Promise<DayMenuRead> => {
-    const qs = now ? `?now=${encodeURIComponent(now)}` : '';
-    return request<DayMenuRead>(`/nutrition/menus/${menuDate}/create${qs}`, {
-      method: 'POST',
-    });
-  },
-
-  updateMenu: async (menuId: string, data: MenuUpdate): Promise<MenuRead> => {
-    return request<MenuRead>(`/nutrition/menus/${menuId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  },
-
-  createMeal: async (menuDate: string, data: MealCreate): Promise<MenuRead> => {
-    return request<MenuRead>(`/nutrition/menus/${menuDate}/meals`, {
+  // Suggestions & Journal API (BPT-132)
+  createSuggestion: async (data: SuggestionRequest): Promise<SuggestionResponse> => {
+    return request<SuggestionResponse>('/nutrition/suggestions', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  deleteMeal: async (menuDate: string, mealType: MealType): Promise<void> => {
-    return request<void>(`/nutrition/menus/${menuDate}/meals/${mealType}`, {
+  eatMeal: async (menuId: string, data: EatMealRequest): Promise<MenuRead> => {
+    return request<MenuRead>(`/nutrition/menus/${menuId}/eat`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getJournal: async (date: string): Promise<JournalResponse> => {
+    return request<JournalResponse>(`/nutrition/journal?date=${encodeURIComponent(date)}`);
+  },
+
+  deleteMeal: async (menuId: string): Promise<void> => {
+    return request<void>(`/nutrition/menus/${menuId}`, {
       method: 'DELETE',
-    });
-  },
-
-  generateMenu: async (menuDate: string, data: GenerationRequest): Promise<GenerationResultRead> => {
-    return request<GenerationResultRead>(`/nutrition/menus/${menuDate}/generate`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  estimateMenu: async (menuDate: string, mealType?: MealType): Promise<DayMenuRead> => {
-    const params = new URLSearchParams();
-    if (mealType) params.set('meal_type', mealType);
-    const qs = params.toString() ? `?${params.toString()}` : '';
-    return request<DayMenuRead>(`/nutrition/menus/${menuDate}/estimate${qs}`, {
-      method: 'POST',
-    });
-  },
-
-  addMenuItem: async (menuDate: string, mealType: MealType, data: MenuItemCreate): Promise<MenuItemRead> => {
-    const params = new URLSearchParams({ meal_type: mealType });
-    return request<MenuItemRead>(`/nutrition/menus/${menuDate}/items?${params.toString()}`, {
-      method: 'POST',
-      body: JSON.stringify(data),
     });
   },
 
@@ -508,98 +460,6 @@ const realNutritionApi = {
     return request<MenuItemRead>(`/nutrition/menu-items/${itemId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-    });
-  },
-
-  deleteMenuItem: async (itemId: string): Promise<void> => {
-    return request<void>(`/nutrition/menu-items/${itemId}`, {
-      method: 'DELETE',
-    });
-  },
-
-  // Off-plan entries (graceful 404 handling)
-  getOffPlan: async (menuDate: string): Promise<OffPlanEntryRead[]> => {
-    try {
-      const params = new URLSearchParams({ date: menuDate });
-      return await request<OffPlanEntryRead[]>(`/nutrition/off-plan?${params.toString()}`);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return [];
-      }
-      throw err;
-    }
-  },
-
-  createOffPlan: async (data: OffPlanEntryCreate): Promise<OffPlanEntryRead | null> => {
-    try {
-      return await request<OffPlanEntryRead>('/nutrition/off-plan', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return null;
-      }
-      throw err;
-    }
-  },
-
-  deleteOffPlan: async (id: string): Promise<void> => {
-    try {
-      await request<void>(`/nutrition/off-plan/${id}`, {
-        method: 'DELETE',
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return;
-      }
-      throw err;
-    }
-  },
-
-  // AI Notes (graceful 404 handling)
-  createMenuNote: async (menuDate: string, data: MenuNoteCreate): Promise<MenuNoteRead | null> => {
-    try {
-      return await request<MenuNoteRead>(`/nutrition/menus/${menuDate}/notes`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return null;
-      }
-      throw err;
-    }
-  },
-
-  // Pinned Meals
-  getPinnedMeals: async (): Promise<PinnedMealRead[]> => {
-    try {
-      return await request<PinnedMealRead[]>('/nutrition/pinned-meals');
-    } catch (err) {
-      if (isExpectedEmptyStatus(err)) {
-        return [];
-      }
-      throw err;
-    }
-  },
-
-  upsertPinnedMeal: async (mealType: MealType, data: PinnedMealUpsert): Promise<PinnedMealRead> => {
-    return request<PinnedMealRead>(`/nutrition/pinned-meals/${mealType}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  },
-
-  deletePinnedMeal: async (mealType: MealType): Promise<void> => {
-    return request<void>(`/nutrition/pinned-meals/${mealType}`, {
-      method: 'DELETE',
-    });
-  },
-
-  pinMeal: async (menuDate: string, mealType: MealType): Promise<MenuRead | void> => {
-    return request<MenuRead | void>(`/nutrition/menus/${menuDate}/meals/${mealType}/pin`, {
-      method: 'POST',
     });
   },
 };
