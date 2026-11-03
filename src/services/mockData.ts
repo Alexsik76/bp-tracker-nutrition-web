@@ -354,42 +354,67 @@ export const mockNutritionApi = {
 
   // Suggestions & Journal API
   createSuggestion: async (data: SuggestionRequest): Promise<SuggestionResponse> => {
-    if (data.text && (data.text.includes('з\'їв') || data.text.includes('зїв'))) {
+    const mode = data.mode ?? 'suggest';
+    if (mode === 'log') {
+      const text = data.text?.trim() || 'Прийом їжі';
+      const parts = text.split(',').map((s) => s.trim()).filter(Boolean);
+      const items = parts.length > 1
+        ? parts.map((part, idx) => ({
+            id: `item-${Date.now()}-${idx}`,
+            menu_id: `meal-${Date.now()}`,
+            dish_id: null,
+            title: part,
+            portion_g: 150,
+            portion_text: '150 г',
+            kcal: 150,
+            protein_g: 15,
+            fat_g: 5,
+            carbs_g: 15,
+            fiber_g: 1,
+            sugar_g: 1,
+            sodium_mg: 100,
+            nutrition_source: 'model' as const,
+            origin: 'manual' as const,
+            position: idx,
+            updated_at: new Date().toISOString(),
+          }))
+        : [
+            {
+              id: `item-${Date.now()}`,
+              menu_id: `meal-${Date.now()}`,
+              dish_id: null,
+              title: text,
+              portion_g: 150,
+              portion_text: '150 г',
+              kcal: 180,
+              protein_g: 12,
+              fat_g: 6,
+              carbs_g: 18,
+              fiber_g: 1,
+              sugar_g: 1,
+              sodium_mg: 100,
+              nutrition_source: 'model' as const,
+              origin: 'manual' as const,
+              position: 0,
+              updated_at: new Date().toISOString(),
+            },
+          ];
+
       const loggedMeal: MenuRead = {
         id: `meal-${Date.now()}`,
         user_id: 'dev-bypass-user',
         date: data.date,
-        meal_type: 'snack' as unknown as any,
+        meal_type: 'afternoon_snack',
         origin: 'manual',
         state: 'eaten',
         eaten_at: data.at,
-        items: [
-          {
-            id: `item-${Date.now()}`,
-            menu_id: `meal-${Date.now()}`,
-            dish_id: null,
-            title: data.text,
-            portion_g: 150,
-            portion_text: '150 г',
-            kcal: 180,
-            protein_g: 12,
-            fat_g: 6,
-            carbs_g: 18,
-            fiber_g: 1,
-            sugar_g: 1,
-            sodium_mg: 100,
-            nutrition_source: 'model',
-            origin: 'manual',
-            position: 0,
-            updated_at: new Date().toISOString(),
-          },
-        ],
+        items,
         evaluations: [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       mockMeals.push(loggedMeal);
-      return { intent: 'log', menu: loggedMeal };
+      return { mode: 'log', menu: loggedMeal };
     }
 
     const sugg: MenuRead = {
@@ -444,7 +469,7 @@ export const mockNutritionApi = {
       updated_at: new Date().toISOString(),
     };
     mockCurrentSuggestion = sugg;
-    return { intent: 'suggest', menu: sugg };
+    return { mode: 'suggest', menu: sugg };
   },
 
   eatMeal: async (menuId: string, data: EatMealRequest): Promise<MenuRead> => {

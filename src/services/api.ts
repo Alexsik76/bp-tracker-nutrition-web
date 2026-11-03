@@ -344,7 +344,10 @@ const realNutritionApi = {
   createSuggestion: async (data: SuggestionRequest): Promise<SuggestionResponse> => {
     return request<SuggestionResponse>('/nutrition/suggestions', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        mode: data.mode ?? 'suggest',
+        ...data,
+      }),
     });
   },
 
