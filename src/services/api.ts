@@ -11,16 +11,10 @@ import type {
   ProductRead,
   ProductCreate,
   ProductUpdate,
-  RecipeRead,
-  RecipeCreate,
-  RecipeUpdate,
-  FrequentDishRead,
-  FrequentDishCreate,
-  FrequentDishUpdate,
-  FrequentDishCookRequest,
   DishRead,
   DishCreate,
   DishUpdate,
+  MealType,
   MenuRead,
   MenuItemRead,
   MenuItemUpdate,
@@ -298,105 +292,20 @@ const realNutritionApi = {
     });
   },
 
-  estimateProduct: async (productId: string): Promise<ProductRead> => {
-    return request<ProductRead>(`/nutrition/products/${productId}/estimate`, {
-      method: 'POST',
-    });
-  },
-
   deleteProduct: async (productId: string): Promise<void> => {
     return request<void>(`/nutrition/products/${productId}`, {
       method: 'DELETE',
     });
   },
 
-  // Recipes
-  getRecipes: async (includeArchived = false): Promise<RecipeRead[]> => {
-    try {
-      const params = new URLSearchParams();
-      if (includeArchived) params.set('include_archived', 'true');
-      const qs = params.toString() ? `?${params.toString()}` : '';
-      return await request<RecipeRead[]>(`/nutrition/recipes${qs}`);
-    } catch (err) {
-      if (isExpectedEmptyStatus(err)) {
-        return [];
-      }
-      throw err;
-    }
-  },
-
-  getRecipe: async (recipeId: string): Promise<RecipeRead> => {
-    return request<RecipeRead>(`/nutrition/recipes/${recipeId}`);
-  },
-
-  createRecipe: async (data: RecipeCreate): Promise<RecipeRead> => {
-    return request<RecipeRead>('/nutrition/recipes', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  updateRecipe: async (recipeId: string, data: RecipeUpdate): Promise<RecipeRead> => {
-    return request<RecipeRead>(`/nutrition/recipes/${recipeId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  },
-
-  deleteRecipe: async (recipeId: string): Promise<void> => {
-    return request<void>(`/nutrition/recipes/${recipeId}`, {
-      method: 'DELETE',
-    });
-  },
-
-  // Frequent Dishes
-  getFrequentDishes: async (): Promise<FrequentDishRead[]> => {
-    try {
-      return await request<FrequentDishRead[]>('/nutrition/frequent-dishes');
-    } catch (err) {
-      if (isExpectedEmptyStatus(err)) {
-        return [];
-      }
-      throw err;
-    }
-  },
-
-  getFrequentDish: async (id: string): Promise<FrequentDishRead> => {
-    return request<FrequentDishRead>(`/nutrition/frequent-dishes/${id}`);
-  },
-
-  createFrequentDish: async (data: FrequentDishCreate): Promise<FrequentDishRead> => {
-    return request<FrequentDishRead>('/nutrition/frequent-dishes', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  updateFrequentDish: async (id: string, data: FrequentDishUpdate): Promise<FrequentDishRead> => {
-    return request<FrequentDishRead>(`/nutrition/frequent-dishes/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  },
-
-  deleteFrequentDish: async (id: string): Promise<void> => {
-    return request<void>(`/nutrition/frequent-dishes/${id}`, {
-      method: 'DELETE',
-    });
-  },
-
-  cookFrequentDish: async (id: string, data: FrequentDishCookRequest): Promise<DishRead> => {
-    return request<DishRead>(`/nutrition/frequent-dishes/${id}/cook`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
   // Dishes
-  getDishes: async (available?: boolean): Promise<DishRead[]> => {
+  getDishes: async (isReady?: boolean, pinnedMealType?: MealType | null): Promise<DishRead[]> => {
     try {
       const params = new URLSearchParams();
-      if (available !== undefined) params.set('available', String(available));
+      if (isReady !== undefined) params.set('is_ready', String(isReady));
+      if (pinnedMealType !== undefined && pinnedMealType !== null) {
+        params.set('pinned_meal_type', pinnedMealType);
+      }
       const qs = params.toString() ? `?${params.toString()}` : '';
       return await request<DishRead[]>(`/nutrition/dishes${qs}`);
     } catch (err) {

@@ -72,10 +72,10 @@ onUnmounted(() => {
 <style scoped>
 .modal-backdrop {
   position: fixed;
-  inset: 0;
-  background-color: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  inset: var(--space-0);
+  background-color: var(--color-modal-backdrop);
+  backdrop-filter: blur(var(--blur-modal));
+  -webkit-backdrop-filter: blur(var(--blur-modal));
   z-index: 200;
   display: flex;
   align-items: flex-end;
@@ -84,30 +84,30 @@ onUnmounted(() => {
 
 .modal-content {
   width: 100%;
-  max-width: 480px;
+  max-width: var(--screen-max-width);
   background-color: var(--surface);
-  border-top-left-radius: 24px;
-  border-top-right-radius: 24px;
-  border: 1px solid var(--surface-border);
+  border-top-left-radius: var(--radius-sheet);
+  border-top-right-radius: var(--radius-sheet);
+  border: var(--border-width-base) solid var(--surface-border);
   border-bottom: none;
-  max-height: 90vh;
+  max-height: var(--modal-max-height);
   display: flex;
   flex-direction: column;
   padding-bottom: calc(var(--space-16) + var(--safe-area-bottom));
-  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideUp var(--transition-sheet);
 }
 
 .modal-handle-bar {
   display: flex;
   justify-content: center;
-  padding: 10px 0 4px;
+  padding: var(--space-10) var(--space-0) var(--space-4);
 }
 
 .modal-drag-indicator {
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
-  background-color: rgba(255, 255, 255, 0.2);
+  width: var(--sheet-drag-width);
+  height: var(--sheet-drag-height);
+  border-radius: var(--radius-xs);
+  background-color: var(--color-drag-indicator);
 }
 
 .modal-header {
@@ -115,12 +115,12 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-8) var(--space-16) var(--space-12);
-  border-bottom: 1px solid var(--surface-border);
+  border-bottom: var(--border-width-base) solid var(--surface-border);
 }
 
 .modal-title {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
 }
 
@@ -135,8 +135,8 @@ onUnmounted(() => {
 }
 
 .modal-footer {
-  padding: var(--space-12) var(--space-16) 0;
-  border-top: 1px solid var(--surface-border);
+  padding: var(--space-12) var(--space-16) var(--space-0);
+  border-top: var(--border-width-base) solid var(--surface-border);
   display: flex;
   gap: var(--space-12);
 }
@@ -152,7 +152,7 @@ onUnmounted(() => {
 }
 
 .fade-enter-active, .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-fade);
 }
 
 .fade-enter-from, .fade-leave-to {

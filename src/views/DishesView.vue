@@ -1,20 +1,13 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { nutritionApi, ApiError } from '../services/api';
+import { nutritionApi } from '../services/api';
 import { useToastStore } from '../stores/toast';
-import SegmentedControl from '../components/SegmentedControl.vue';
+import ModalSheet from '../components/ModalSheet.vue';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 import EmptyState from '../components/EmptyState.vue';
-import DishCard from '../components/dishes/DishCard.vue';
-import DishCreateModalSheet from '../components/dishes/DishCreateModalSheet.vue';
-import DishEditModalSheet from '../components/dishes/DishEditModalSheet.vue';
-import type {
-  DishRead,
-  DishCreate,
-  DishUpdate,
-  RecipeRead,
-} from '../types/nutrition';
+import DishComponentsEditor from '../components/dishes/DishComponentsEditor.vue';
+import type { DishRead, MealType, DishComponentCreate } from '../types/nutrition';
 
 const props = withDefaults(
   defineProps<{
@@ -28,270 +21,303 @@ const props = withDefaults(
 const router = useRouter();
 const toastStore = useToastStore();
 
-type DishesTab = 'fridge' | 'recipes';
-
-const activeTab = ref<DishesTab>('fridge');
-const tabOptions = [
-  { label: 'Холодильник', value: 'fridge' },
-  { label: 'Рецепти', value: 'recipes' },
-];
-
-const loading = ref(true);
-const productsMap = ref<Record<string, string>>({});
-
-// Tab 1: Fridge (Dishes)
 const dishes = ref<DishRead[]>([]);
-const isCreateModalOpen = ref(false);
-const isEditModalOpen = ref(false);
-const editingDish = ref<DishRead | null>(null);
-const savingDish = ref(false);
+const loading = ref(true);
 
-// Tab 2: Recipes
-const recipes = ref<RecipeRead[]>([]);
-const showArchivedRecipes = ref(false);
-const renamingRecipeId = ref<string | null>(null);
-const renameValue = ref('');
+// 3 Groups
+const pinnedDishes = computed(() =>
+  dishes.value.filter((d) => d.pinned_meal_type != null)
+);
 
-async function loadProductsMap() {
-  try {
-    const prods = await nutritionApi.getProducts();
-    const map: Record<string, string> = {};
-    for (const p of prods) {
-      map[p.id] = p.name;
-    }
-    productsMap.value = map;
-  } catch {
-    // ignore
-  }
-}
+const readyDishes = computed(() =>
+  dishes.value.filter((d) => d.is_ready && !d.pinned_meal_type)
+);
 
-async function loadTabData() {
+const otherDishes = computed(() =>
+  dishes.value.filter((d) => !d.is_ready && !d.pinned_meal_type)
+);
+
+async function loadDishes() {
   loading.value = true;
   try {
-    if (activeTab.value === 'fridge') {
-      dishes.value = await nutritionApi.getDishes(true);
-    } else if (activeTab.value === 'recipes') {
-      recipes.value = await nutritionApi.getRecipes(showArchivedRecipes.value);
-    }
-  } catch (err) {
-    console.error('Error loading tab data:', err);
-    toastStore.show('Помилка завантаження даних', 'error');
+    dishes.value = await nutritionApi.getDishes();
+  } catch (err: unknown) {
+    console.error('Failed to load dishes:', err);
+    toastStore.show('Помилка завантаження страв', 'error');
   } finally {
     loading.value = false;
   }
 }
 
-watch(activeTab, () => {
-  loadTabData();
-});
+// --- Switch: Toggle Ready State ---
+async function toggleReady(dish: DishRead) {
+  const nextReady = !dish.is_ready;
+  const prevReady = dish.is_ready;
+  dish.is_ready = nextReady; // Optimistic update
 
-watch(showArchivedRecipes, () => {
-  if (activeTab.value === 'recipes') {
-    loadTabData();
-  }
-});
-
-// --- Fridge Actions ---
-function openCreateDish() {
-  isCreateModalOpen.value = true;
-}
-
-function openEditDish(dish: DishRead) {
-  editingDish.value = dish;
-  isEditModalOpen.value = true;
-}
-
-async function handleSaveCreateDish({ data }: { data: DishCreate; saveAsFrequent: boolean }) {
-  savingDish.value = true;
   try {
-    const created = await nutritionApi.createDish(data);
-    dishes.value.unshift(created);
-    toastStore.show('Страву приготовлено', 'success');
-    isCreateModalOpen.value = false;
+    const updated = await nutritionApi.updateDish(dish.id, { is_ready: nextReady });
+    dish.is_ready = updated.is_ready;
   } catch (err: unknown) {
-    console.error('Create dish error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка приготування', 'error');
-  } finally {
-    savingDish.value = false;
+    dish.is_ready = prevReady;
+    console.error('Failed to update dish is_ready:', err);
+    toastStore.show('Не вдалося оновити статус страви', 'error');
   }
 }
 
-async function handleSaveEditDish(payload: DishUpdate) {
-  if (!editingDish.value) return;
-  savingDish.value = true;
+// --- Pinning Slot Choice ---
+const isSlotModalOpen = ref(false);
+const slotTargetDish = ref<DishRead | null>(null);
+
+const pinSlots: { label: string; value: MealType }[] = [
+  { label: 'Сніданок', value: 'breakfast' },
+  { label: 'Обід', value: 'lunch' },
+  { label: 'Вечеря', value: 'dinner' },
+  { label: 'Перекус', value: 'afternoon_snack' },
+];
+
+function openSlotChoice(dish: DishRead) {
+  slotTargetDish.value = dish;
+  isSlotModalOpen.value = true;
+}
+
+async function assignPinSlot(slot: MealType) {
+  if (!slotTargetDish.value) return;
+  const dish = slotTargetDish.value;
+  const slotInfo = pinSlots.find((s) => s.value === slot);
+  isSlotModalOpen.value = false;
+
+  const prevSlot = dish.pinned_meal_type;
+  dish.pinned_meal_type = slot; // Optimistic
+
   try {
-    const updated = await nutritionApi.updateDish(editingDish.value.id, payload);
-    const index = dishes.value.findIndex((d) => d.id === editingDish.value?.id);
-    if (index !== -1) {
-      dishes.value[index] = updated;
+    await nutritionApi.updateDish(dish.id, { pinned_meal_type: slot });
+    toastStore.show(`Страву «${dish.name}» закріплено (${slotInfo?.label})`, 'success');
+  } catch (err: unknown) {
+    dish.pinned_meal_type = prevSlot;
+    console.error('Failed to pin dish:', err);
+    toastStore.show('Не вдалося закріпити страву', 'error');
+  } finally {
+    slotTargetDish.value = null;
+  }
+}
+
+async function removePin(dish: DishRead) {
+  const prevSlot = dish.pinned_meal_type;
+  dish.pinned_meal_type = null; // Optimistic
+
+  try {
+    await nutritionApi.updateDish(dish.id, { pinned_meal_type: null });
+    toastStore.show(`Закріплення зі страви «${dish.name}» знято`, 'info');
+  } catch (err: unknown) {
+    dish.pinned_meal_type = prevSlot;
+    console.error('Failed to unpin dish:', err);
+    toastStore.show('Не вдалося зняти закріплення', 'error');
+  }
+}
+
+// --- Long Press & Tap via Pointer Events ---
+let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+let isLongPressTriggered = false;
+let startX = 0;
+let startY = 0;
+
+function handlePointerDown(e: PointerEvent, dish: DishRead) {
+  if (e.button !== 0) return;
+  startX = e.clientX;
+  startY = e.clientY;
+  isLongPressTriggered = false;
+
+  if (longPressTimer !== null) {
+    clearTimeout(longPressTimer);
+  }
+
+  longPressTimer = setTimeout(() => {
+    isLongPressTriggered = true;
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(40);
+      } catch {
+        // ignore
+      }
     }
-    editingDish.value = updated;
-    toastStore.show('Страву оновлено', 'success');
-  } catch (err: unknown) {
-    console.error('Update dish error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення', 'error');
-  } finally {
-    savingDish.value = false;
-  }
-}
-
-async function handleSaveDishManualNutrition(payload: {
-  kcal?: number | null;
-  protein_g?: number | null;
-  fat_g?: number | null;
-  carbs_g?: number | null;
-}) {
-  if (!editingDish.value) return;
-  savingDish.value = true;
-  try {
-    const updated = await nutritionApi.updateDish(editingDish.value.id, payload);
-    const index = dishes.value.findIndex((d) => d.id === editingDish.value?.id);
-    if (index !== -1) {
-      dishes.value[index] = updated;
+    if (dish.pinned_meal_type != null) {
+      removePin(dish);
+    } else if (dish.is_ready) {
+      openSlotChoice(dish);
     }
-    editingDish.value = updated;
-    toastStore.show('КБЖВ оновлено', 'success');
-  } catch (err: unknown) {
-    console.error('Update dish nutrition error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення КБЖВ', 'error');
-  } finally {
-    savingDish.value = false;
+  }, 500);
+}
+
+function handlePointerMove(e: PointerEvent) {
+  if (longPressTimer === null) return;
+  const dx = Math.abs(e.clientX - startX);
+  const dy = Math.abs(e.clientY - startY);
+  if (dx > 8 || dy > 8) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
   }
 }
 
-async function handleDeleteDish(id: string) {
-  if (!confirm('Видалити цю страву?')) return;
-  savingDish.value = true;
-  try {
-    await nutritionApi.deleteDish(id);
-    dishes.value = dishes.value.filter((d) => d.id !== id);
-    toastStore.show('Страву видалено', 'success');
-    isEditModalOpen.value = false;
-    editingDish.value = null;
-  } catch (err: unknown) {
-    console.error('Delete dish error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка видалення', 'error');
-  } finally {
-    savingDish.value = false;
+function handlePointerUp(dish: DishRead) {
+  if (longPressTimer !== null) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
   }
-}
-
-async function markFinished(dish: DishRead) {
-  const prevRemaining = dish.remaining_g;
-  dish.remaining_g = 0;
-
-  try {
-    await nutritionApi.updateDish(dish.id, { remaining_g: 0 });
-    toastStore.show(`Страву «${dish.name}» списано`, 'info');
-    dishes.value = dishes.value.filter((d) => d.id !== dish.id);
-  } catch {
-    dish.remaining_g = prevRemaining;
-    toastStore.show('Не вдалося оновити залишок', 'error');
-  }
-}
-
-async function adjustRemaining({ dish, deltaG }: { dish: DishRead; deltaG: number }) {
-  const current = dish.remaining_g ?? dish.cooked_weight_g ?? 0;
-  const next = Math.max(0, current + deltaG);
-  if (next === current) return;
-
-  const prev = dish.remaining_g;
-  dish.remaining_g = next;
-
-  try {
-    await nutritionApi.updateDish(dish.id, { remaining_g: next });
-    if (next === 0) {
-      dishes.value = dishes.value.filter((d) => d.id !== dish.id);
-      toastStore.show(`Страву «${dish.name}» списано`, 'info');
-    }
-  } catch {
-    dish.remaining_g = prev;
-    toastStore.show('Не вдалося оновити залишок', 'error');
-  }
-}
-
-// --- Recipes Actions ---
-function startRenameRecipe(recipe: RecipeRead) {
-  renamingRecipeId.value = recipe.id;
-  renameValue.value = recipe.name;
-}
-
-async function confirmRenameRecipe(recipe: RecipeRead) {
-  const newName = renameValue.value.trim();
-  if (!newName || newName === recipe.name) {
-    renamingRecipeId.value = null;
+  if (isLongPressTriggered) {
+    isLongPressTriggered = false;
     return;
   }
+  openDishCard(dish);
+}
+
+function handlePointerCancel() {
+  if (longPressTimer !== null) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+  isLongPressTriggered = false;
+}
+
+// --- Dish Card Modal Sheet (Edit & Delete) ---
+const isCardModalOpen = ref(false);
+const activeDish = ref<DishRead | null>(null);
+const savingCard = ref(false);
+const deletingCard = ref(false);
+
+interface CardFormState {
+  name: string;
+  kcal: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  carbs_g: number | null;
+  note: string;
+  components: DishComponentCreate[];
+}
+
+const cardForm = ref<CardFormState>({
+  name: '',
+  kcal: null,
+  protein_g: null,
+  fat_g: null,
+  carbs_g: null,
+  note: '',
+  components: [],
+});
+
+function openDishCard(dish: DishRead) {
+  activeDish.value = dish;
+  cardForm.value = {
+    name: dish.name,
+    kcal: dish.kcal,
+    protein_g: dish.protein_g,
+    fat_g: dish.fat_g,
+    carbs_g: dish.carbs_g,
+    note: dish.note || '',
+    components: (dish.components || []).map((c) => ({
+      product_id: c.product_id,
+      weight_g: c.weight_g,
+    })),
+  };
+  isCardModalOpen.value = true;
+}
+
+function closeDishCard() {
+  isCardModalOpen.value = false;
+  activeDish.value = null;
+}
+
+async function handleSaveCard() {
+  if (!activeDish.value || savingCard.value) return;
+  const dishId = activeDish.value.id;
+  savingCard.value = true;
 
   try {
-    const updated = await nutritionApi.updateRecipe(recipe.id, { name: newName });
-    const idx = recipes.value.findIndex((r) => r.id === recipe.id);
+    const updated = await nutritionApi.updateDish(dishId, {
+      name: cardForm.value.name.trim(),
+      kcal: cardForm.value.kcal,
+      protein_g: cardForm.value.protein_g,
+      fat_g: cardForm.value.fat_g,
+      carbs_g: cardForm.value.carbs_g,
+      note: cardForm.value.note.trim() || null,
+      components: cardForm.value.components,
+      nutrition_overridden: true,
+    });
+
+    const idx = dishes.value.findIndex((d) => d.id === dishId);
     if (idx !== -1) {
-      recipes.value[idx] = updated;
+      dishes.value[idx] = updated;
     }
-    toastStore.show('Рецепт перейменовано', 'success');
+    toastStore.show('Картку страви збережено', 'success');
+    closeDishCard();
   } catch (err: unknown) {
-    console.error('Rename recipe error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка перейменування', 'error');
+    console.error('Failed to save dish card:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка збереження', 'error');
   } finally {
-    renamingRecipeId.value = null;
+    savingCard.value = false;
   }
 }
 
-function cancelRename() {
-  renamingRecipeId.value = null;
-}
+async function handleDeleteDish() {
+  if (!activeDish.value || deletingCard.value) return;
+  if (!confirm(`Видалити страву «${activeDish.value.name}»?`)) return;
 
-async function toggleArchiveRecipe(recipe: RecipeRead) {
-  const nextArchived = !recipe.archived;
-  try {
-    const updated = await nutritionApi.updateRecipe(recipe.id, { archived: nextArchived });
-    const idx = recipes.value.findIndex((r) => r.id === recipe.id);
-    if (idx !== -1) {
-      if (!showArchivedRecipes.value && nextArchived) {
-        recipes.value.splice(idx, 1);
-      } else {
-        recipes.value[idx] = updated;
-      }
-    }
-    toastStore.show(nextArchived ? 'Рецепт перенесено в архів' : 'Рецепт відновлено з архіву', 'info');
-  } catch (err: unknown) {
-    console.error('Toggle archive recipe error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка зміни статусу архіву', 'error');
-  }
-}
-
-async function handleDeleteRecipe(recipe: RecipeRead) {
-  if (!confirm(`Видалити рецепт «${recipe.name}»?`)) return;
+  const dishId = activeDish.value.id;
+  deletingCard.value = true;
 
   try {
-    await nutritionApi.deleteRecipe(recipe.id);
-    recipes.value = recipes.value.filter((r) => r.id !== recipe.id);
-    toastStore.show('Рецепт видалено', 'success');
+    await nutritionApi.deleteDish(dishId);
+    dishes.value = dishes.value.filter((d) => d.id !== dishId);
+    toastStore.show('Страву видалено', 'success');
+    closeDishCard();
   } catch (err: unknown) {
-    if (err instanceof ApiError && err.status === 409) {
-      const msg = err.message || 'Рецепт використовується у стравах і не може бути видалений.';
-      const shouldArchive = confirm(`${msg}\n\nБажаєте архівувати його замість видалення?`);
-      if (shouldArchive) {
-        try {
-          const updated = await nutritionApi.updateRecipe(recipe.id, { archived: true });
-          const idx = recipes.value.findIndex((r) => r.id === recipe.id);
-          if (idx !== -1) {
-            if (!showArchivedRecipes.value) {
-              recipes.value.splice(idx, 1);
-            } else {
-              recipes.value[idx] = updated;
-            }
-          }
-          toastStore.show('Рецепт перенесено в архів', 'info');
-        } catch (archiveErr: unknown) {
-          toastStore.show(archiveErr instanceof Error ? archiveErr.message : 'Помилка архівації', 'error');
-        }
-      }
-    } else {
-      toastStore.show(err instanceof Error ? err.message : 'Помилка видалення', 'error');
-    }
+    console.error('Failed to delete dish:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка видалення', 'error');
+  } finally {
+    deletingCard.value = false;
   }
+}
+
+// --- FAB: Add Dish by Name Only ---
+const isAddModalOpen = ref(false);
+const newDishName = ref('');
+const addingDish = ref(false);
+
+function openAddModal() {
+  newDishName.value = '';
+  isAddModalOpen.value = true;
+}
+
+async function handleAddDish() {
+  const name = newDishName.value.trim();
+  if (!name || addingDish.value) return;
+
+  addingDish.value = true;
+  try {
+    const created = await nutritionApi.createDish({ name });
+    dishes.value.unshift(created);
+    isAddModalOpen.value = false;
+    newDishName.value = '';
+    const kcalStr = created.kcal != null ? ` (${Math.round(created.kcal)} ккал)` : '';
+    toastStore.show(`Страву «${created.name}» додано${kcalStr}`, 'success');
+  } catch (err: unknown) {
+    console.error('Failed to create dish:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка додавання страви', 'error');
+  } finally {
+    addingDish.value = false;
+  }
+}
+
+// Formatting helpers
+function formatKcal(val: number | null | undefined): string {
+  if (val == null) return '0';
+  return Math.round(val).toString();
+}
+
+function formatProtein(val: number | null | undefined): string {
+  if (val == null) return '0';
+  if (Number.isInteger(val)) return val.toString();
+  return val.toFixed(1).replace('.', ',');
 }
 
 function goBack() {
@@ -299,605 +325,738 @@ function goBack() {
 }
 
 onMounted(() => {
-  loadProductsMap();
-  loadTabData();
+  loadDishes();
 });
 </script>
 
 <template>
-  <div class="dishes-view" :class="{ 'is-embedded': props.embedded }">
-    <div class="view-header">
-      <div class="title-wrap">
-        <button v-if="!props.embedded" type="button" class="btn-back" @click="goBack" aria-label="Назад">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-        </button>
-        <div>
-          <h1 class="view-title">Страви та рецепти</h1>
-          <p class="view-subtitle">Холодильник та шаблони рецептів</p>
-        </div>
-      </div>
-
-      <button
-        v-if="activeTab === 'fridge'"
-        class="btn btn-primary add-dish-btn"
-        @click="openCreateDish"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
+  <div class="dishes-screen" :class="{ 'is-embedded': props.embedded }">
+    <!-- Standalone Header (only when not embedded in MenuView) -->
+    <header v-if="!props.embedded" class="standalone-header">
+      <button type="button" class="btn-icon" @click="goBack" aria-label="Назад">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"></polyline>
         </svg>
-        <span>Приготувати</span>
       </button>
+      <h1 class="header-title">Є вдома</h1>
+    </header>
+
+    <div v-if="loading" class="loading-wrap">
+      <LoadingSpinner text="Завантаження страв..." />
     </div>
 
-    <!-- Segmented Control Tabs Switcher -->
-    <div class="tabs-switcher">
-      <SegmentedControl v-model="activeTab" :options="tabOptions" />
+    <div v-else-if="dishes.length === 0" class="empty-wrap">
+      <EmptyState
+        title="Страв ще немає"
+        description="Додайте страви, які ви готуєте або маєте вдома, кнопкою «+»."
+        action-label="Додати першу страву"
+        @action="openAddModal"
+      />
     </div>
 
-    <LoadingSpinner v-if="loading" text="Завантаження..." />
-
-    <!-- TAB 1: FRIDGE -->
-    <div v-else-if="activeTab === 'fridge'">
-      <div v-if="dishes.length === 0">
-        <EmptyState
-          title="Холодильник порожній"
-          description="Додайте приготовані страви з вагою, щоб розподілити їх у меню дня"
-          action-label="Приготувати страву"
-          @action="openCreateDish"
-        />
-      </div>
-
-      <div v-else class="dishes-list">
-        <DishCard
-          v-for="dish in dishes"
-          :key="dish.id"
-          :dish="dish"
-          @edit="openEditDish"
-          @adjust-remaining="adjustRemaining"
-          @mark-finished="markFinished"
-        />
-      </div>
-    </div>
-
-    <!-- TAB 2: RECIPES -->
-    <div v-else-if="activeTab === 'recipes'">
-      <!-- Recipes Toolbar: Toggle Archived -->
-      <div class="recipes-toolbar">
-        <label class="toggle-archived-label">
-          <input
-            v-model="showArchivedRecipes"
-            type="checkbox"
-            class="form-checkbox"
-          />
-          <span>Показати архівовані</span>
-        </label>
-      </div>
-
-      <div v-if="recipes.length === 0">
-        <EmptyState
-          title="Рецептів не знайдено"
-          :description="showArchivedRecipes ? 'Немає рецептів (включно з архівом)' : 'У вас ще немає збережених рецептів'"
-          action-label="Приготувати страву як новий рецепт"
-          @action="activeTab = 'fridge'; openCreateDish()"
-        />
-      </div>
-
-      <div v-else class="recipes-list">
+    <!-- Scrollable Groups List -->
+    <div v-else class="dishes-list-scroll">
+      <!-- Group 1: Постійні -->
+      <section v-if="pinnedDishes.length > 0" class="dishes-group">
+        <div class="group-title">Постійні</div>
         <div
-          v-for="recipe in recipes"
-          :key="recipe.id"
-          class="card recipe-card"
-          :class="{ 'recipe-archived': recipe.archived }"
+          v-for="dish in pinnedDishes"
+          :key="dish.id"
+          class="dish-row"
+          tabindex="0"
+          role="button"
+          @pointerdown="handlePointerDown($event, dish)"
+          @pointermove="handlePointerMove"
+          @pointerup="handlePointerUp(dish)"
+          @pointercancel="handlePointerCancel"
+          @keydown.enter="openDishCard(dish)"
+          @contextmenu.prevent
         >
-          <div class="recipe-main-row">
-            <div class="recipe-info">
-              <!-- Name / Rename Input -->
-              <div v-if="renamingRecipeId === recipe.id" class="recipe-rename-box">
-                <input
-                  v-model="renameValue"
-                  type="text"
-                  class="form-input rename-input"
-                  autofocus
-                  @keydown.enter="confirmRenameRecipe(recipe)"
-                  @keydown.esc="cancelRename"
-                />
-                <button
-                  type="button"
-                  class="btn btn-primary btn-sm"
-                  @click="confirmRenameRecipe(recipe)"
-                >
-                  OK
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm"
-                  @click="cancelRename"
-                >
-                  Скасувати
-                </button>
-              </div>
-
-              <div v-else class="recipe-name-row">
-                <h3 class="recipe-name">{{ recipe.name }}</h3>
-                <span v-if="recipe.archived" class="badge badge-neutral">
-                  В архіві
-                </span>
-              </div>
-
-              <!-- Product list -->
-              <div v-if="recipe.product_ids && recipe.product_ids.length > 0" class="recipe-products-chips">
-                <span
-                  v-for="pid in recipe.product_ids"
-                  :key="pid"
-                  class="recipe-product-pill"
-                >
-                  {{ productsMap[pid] || 'Продукт' }}
-                </span>
-              </div>
+          <div class="dish-info">
+            <div class="dish-name">{{ dish.name }}</div>
+            <div class="dish-nutrition">
+              {{ formatKcal(dish.kcal) }} ккал · білок {{ formatProtein(dish.protein_g) }} г
             </div>
           </div>
-
-          <!-- Recipe Card Actions -->
-          <div class="recipe-actions-row">
-            <button
-              v-if="renamingRecipeId !== recipe.id"
-              type="button"
-              class="btn-text"
-              @click="startRenameRecipe(recipe)"
+          <div class="dish-action">
+            <svg
+              class="pin-icon"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-label="Закріплена страва"
             >
-              Перейменувати
-            </button>
+              <line x1="12" y1="17" x2="12" y2="22"></line>
+              <path d="M5 17h14v-2l-2-2V5a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v8l-2 2v2z"></path>
+            </svg>
+          </div>
+        </div>
+      </section>
 
+      <!-- Group 2: Готові -->
+      <section v-if="readyDishes.length > 0" class="dishes-group">
+        <div class="group-title">Готові</div>
+        <div
+          v-for="dish in readyDishes"
+          :key="dish.id"
+          class="dish-row"
+          tabindex="0"
+          role="button"
+          @pointerdown="handlePointerDown($event, dish)"
+          @pointermove="handlePointerMove"
+          @pointerup="handlePointerUp(dish)"
+          @pointercancel="handlePointerCancel"
+          @keydown.enter="openDishCard(dish)"
+          @contextmenu.prevent
+        >
+          <div class="dish-info">
+            <div class="dish-name">{{ dish.name }}</div>
+            <div class="dish-nutrition">
+              {{ formatKcal(dish.kcal) }} ккал · білок {{ formatProtein(dish.protein_g) }} г на 100 г
+            </div>
+          </div>
+          <div class="dish-action">
             <button
               type="button"
-              class="btn-text"
-              @click="toggleArchiveRecipe(recipe)"
+              role="switch"
+              :aria-checked="true"
+              class="md-switch is-active"
+              aria-label="Є готова"
+              @pointerdown.stop
+              @pointerup.stop
+              @click.stop="toggleReady(dish)"
             >
-              {{ recipe.archived ? 'Повернути з архіву' : 'Архівувати' }}
-            </button>
-
-            <button
-              type="button"
-              class="btn-text text-danger"
-              @click="handleDeleteRecipe(recipe)"
-            >
-              Видалити
+              <span class="md-switch-knob"></span>
             </button>
           </div>
         </div>
-      </div>
+      </section>
+
+      <!-- Group 3: Інші страви -->
+      <section v-if="otherDishes.length > 0" class="dishes-group">
+        <div class="group-title">Інші страви</div>
+        <div
+          v-for="dish in otherDishes"
+          :key="dish.id"
+          class="dish-row is-other"
+          tabindex="0"
+          role="button"
+          @pointerdown="handlePointerDown($event, dish)"
+          @pointermove="handlePointerMove"
+          @pointerup="handlePointerUp(dish)"
+          @pointercancel="handlePointerCancel"
+          @keydown.enter="openDishCard(dish)"
+          @contextmenu.prevent
+        >
+          <div class="dish-info">
+            <div class="dish-name">{{ dish.name }}</div>
+            <div class="dish-nutrition">
+              {{ formatKcal(dish.kcal) }} ккал · білок {{ formatProtein(dish.protein_g) }} г на 100 г
+            </div>
+          </div>
+          <div class="dish-action">
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="false"
+              class="md-switch"
+              aria-label="Не готова"
+              @pointerdown.stop
+              @pointerup.stop
+              @click.stop="toggleReady(dish)"
+            >
+              <span class="md-switch-knob"></span>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
 
-    <!-- Modals -->
-    <DishCreateModalSheet
-      :show="isCreateModalOpen"
-      :saving="savingDish"
-      @close="isCreateModalOpen = false"
-      @save="handleSaveCreateDish"
-    />
+    <!-- FAB: Add Dish -->
+    <button
+      type="button"
+      class="fab-btn"
+      aria-label="Додати страву"
+      @click="openAddModal"
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
 
-    <DishEditModalSheet
-      :show="isEditModalOpen"
-      :dish="editingDish"
-      :saving="savingDish"
-      @close="isEditModalOpen = false; editingDish = null"
-      @save="handleSaveEditDish"
-      @save-nutrition="handleSaveDishManualNutrition"
-      @delete="handleDeleteDish"
-    />
+    <!-- Modal 1: Slot Choice for Pinning -->
+    <ModalSheet
+      :show="isSlotModalOpen"
+      title="Закріпити за слотом"
+      @close="isSlotModalOpen = false"
+    >
+      <div class="slot-choice-modal">
+        <div class="slot-dish-hint">
+          Оберіть слот дня для постійної страви <strong>«{{ slotTargetDish?.name }}»</strong>:
+        </div>
+        <div class="slot-buttons-list">
+          <button
+            v-for="slot in pinSlots"
+            :key="slot.value"
+            type="button"
+            class="slot-btn"
+            @click="assignPinSlot(slot.value)"
+          >
+            <span>{{ slot.label }}</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </ModalSheet>
+
+    <!-- Modal 2: Dish Card (Edit Nutrition, Note, Composition, Delete) -->
+    <ModalSheet
+      :show="isCardModalOpen"
+      :title="cardForm.name || 'Картка страви'"
+      @close="closeDishCard"
+    >
+      <form @submit.prevent="handleSaveCard" class="dish-card-form">
+        <div class="form-group">
+          <label class="form-label" for="cardDishName">Назва страви</label>
+          <input
+            id="cardDishName"
+            v-model="cardForm.name"
+            type="text"
+            class="form-input"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">КБЖВ на 100 г</label>
+          <div class="nutrition-inputs-grid">
+            <div class="nutrition-input-cell">
+              <span class="cell-label">Калорії</span>
+              <input
+                v-model.number="cardForm.kcal"
+                type="number"
+                step="1"
+                min="0"
+                class="form-input num-mono"
+                placeholder="ккал"
+              />
+            </div>
+            <div class="nutrition-input-cell">
+              <span class="cell-label">Білки</span>
+              <input
+                v-model.number="cardForm.protein_g"
+                type="number"
+                step="0.1"
+                min="0"
+                class="form-input num-mono"
+                placeholder="г"
+              />
+            </div>
+            <div class="nutrition-input-cell">
+              <span class="cell-label">Жири</span>
+              <input
+                v-model.number="cardForm.fat_g"
+                type="number"
+                step="0.1"
+                min="0"
+                class="form-input num-mono"
+                placeholder="г"
+              />
+            </div>
+            <div class="nutrition-input-cell">
+              <span class="cell-label">Вуглеводи</span>
+              <input
+                v-model.number="cardForm.carbs_g"
+                type="number"
+                step="0.1"
+                min="0"
+                class="form-input num-mono"
+                placeholder="г"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cardDishNote">Примітка</label>
+          <textarea
+            id="cardDishNote"
+            v-model="cardForm.note"
+            class="form-textarea"
+            rows="2"
+            placeholder="Вільна примітка (необов'язково)..."
+          ></textarea>
+        </div>
+
+        <!-- Optional Composition -->
+        <DishComponentsEditor v-model="cardForm.components" />
+
+        <div class="card-modal-actions">
+          <button
+            type="submit"
+            class="btn-save-card"
+            :disabled="savingCard"
+          >
+            <span v-if="!savingCard">Зберегти</span>
+            <LoadingSpinner v-else :size="18" />
+          </button>
+          <button
+            type="button"
+            class="btn-delete-card"
+            :disabled="deletingCard"
+            @click="handleDeleteDish"
+          >
+            Видалити страву
+          </button>
+        </div>
+      </form>
+    </ModalSheet>
+
+    <!-- Modal 3: Add Dish by Name Only -->
+    <ModalSheet
+      :show="isAddModalOpen"
+      title="Нова страва"
+      @close="isAddModalOpen = false"
+    >
+      <form @submit.prevent="handleAddDish" class="add-dish-form">
+        <div class="form-group">
+          <label class="form-label" for="newDishName">Назва страви</label>
+          <input
+            id="newDishName"
+            v-model="newDishName"
+            type="text"
+            class="form-input"
+            placeholder="Наприклад: Борщ український"
+            autofocus
+            required
+          />
+          <p class="field-hint">
+            Сервер автоматично розрахує КБЖВ на 100 г за допомогою ШІ.
+          </p>
+        </div>
+
+        <div class="add-modal-actions">
+          <button
+            type="button"
+            class="btn-cancel"
+            @click="isAddModalOpen = false"
+          >
+            Скасувати
+          </button>
+          <button
+            type="submit"
+            class="btn-submit-add"
+            :disabled="addingDish || !newDishName.trim()"
+          >
+            <span v-if="!addingDish">Додати</span>
+            <LoadingSpinner v-else :size="18" />
+          </button>
+        </div>
+      </form>
+    </ModalSheet>
   </div>
 </template>
 
 <style scoped>
-.dishes-view {
-  padding-bottom: var(--space-20);
+.dishes-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  position: relative;
+  box-sizing: border-box;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
 }
 
-.dishes-view.is-embedded {
-  padding-bottom: var(--space-48);
+.dishes-screen:not(.is-embedded) {
+  max-width: var(--screen-max-width);
+  margin: var(--space-0) auto;
+  padding: calc(var(--space-14) + var(--safe-area-top)) var(--space-16) calc(var(--space-8) + var(--safe-area-bottom));
+  min-height: var(--screen-min-height);
 }
 
-.view-header {
+/* Standalone Header */
+.standalone-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-10);
   margin-bottom: var(--space-16);
+  flex-shrink: 0;
 }
 
-.title-wrap {
+.header-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* List & Groups */
+.dishes-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: calc(var(--space-48) + var(--space-24));
+  scrollbar-width: none;
+}
+
+.dishes-list-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.dishes-group {
+  margin-bottom: var(--space-14);
+}
+
+.group-title {
+  margin: var(--space-18) var(--space-4) 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  letter-spacing: var(--letter-spacing-label);
+}
+
+.dish-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: var(--space-8);
+  padding: var(--space-12) var(--space-4);
+  border-bottom: var(--border-width-hairline) solid var(--color-border);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  transition: background-color var(--transition-fast);
 }
 
-.btn-back {
-  background: transparent;
-  border: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
+.dish-row:active {
+  background-color: var(--color-row-active-bg);
+}
+
+.dish-row:focus-visible {
+  outline: var(--border-width-base) solid var(--color-primary);
   border-radius: var(--radius-sm);
 }
 
-.btn-back:hover {
-  color: var(--color-text-primary);
-}
-
-.view-title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-}
-
-.view-subtitle {
-  font-size: var(--font-size-sm);
+.dish-row.is-other {
   color: var(--color-text-muted);
 }
 
-.add-dish-btn {
-  min-height: var(--space-40);
-  padding: 0 var(--space-12);
-  font-size: var(--font-size-sub);
+.dish-name {
+  font-size: var(--font-size-base);
+  color: inherit;
 }
 
-.tabs-switcher {
-  margin-bottom: var(--space-16);
+.dish-row:not(.is-other) .dish-name {
+  color: var(--color-text-primary);
 }
 
-.dishes-list,
-.recipes-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
+.dish-nutrition {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
 }
 
-/* Recipes Toolbar */
-.recipes-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--space-12);
-}
-
-.toggle-archived-label {
+.dish-action {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  justify-content: center;
+  padding-left: var(--space-8);
+}
+
+.pin-icon {
+  color: var(--color-progress-fill);
+}
+
+/* MD3 Switch */
+.md-switch {
+  width: var(--switch-width);
+  height: var(--switch-height);
+  border-radius: var(--switch-radius);
+  position: relative;
+  border: var(--border-width-hairline) solid var(--color-border-strong);
+  background: transparent;
+  padding: 0;
   cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.recipe-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
+.md-switch.is-active {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
-.recipe-card.recipe-archived {
-  opacity: 0.6;
+.md-switch-knob {
+  position: absolute;
+  top: var(--switch-knob-top);
+  left: var(--switch-knob-left);
+  width: var(--switch-knob-size);
+  height: var(--switch-knob-size);
+  border-radius: 50%;
+  background-color: var(--color-border-strong);
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
 }
 
-.recipe-main-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+.md-switch.is-active .md-switch-knob {
+  background-color: var(--color-on-primary);
+  transform: translateX(var(--switch-knob-offset));
 }
 
-.recipe-info {
-  flex: 1;
-}
-
-.recipe-name-row {
+/* FAB */
+.fab-btn {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-12);
+  width: var(--fab-size);
+  height: var(--fab-size);
+  border-radius: var(--fab-radius);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border: none;
   display: flex;
   align-items: center;
+  justify-content: center;
+  box-shadow: var(--fab-shadow);
+  cursor: pointer;
+  z-index: 40;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.dishes-screen:not(.is-embedded) .fab-btn {
+  position: fixed;
+  right: calc(50% - (var(--screen-max-width) / 2) + var(--space-16));
+  bottom: calc(var(--space-24) + var(--safe-area-bottom));
+}
+
+@media (max-width: 480px) {
+  .dishes-screen:not(.is-embedded) .fab-btn {
+    right: var(--space-16);
+  }
+}
+
+.fab-btn:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.fab-btn:active {
+  transform: scale(0.95);
+}
+
+/* Slot Choice Modal */
+.slot-choice-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
+}
+
+.slot-dish-hint {
+  font-size: var(--font-size-input);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.slot-buttons-list {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-8);
 }
 
-.recipe-name {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-}
-
-.recipe-products-chips {
+.slot-btn {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6);
-  margin-top: var(--space-6);
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: var(--btn-height-secondary);
+  background-color: var(--color-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  padding: 0 var(--space-16);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.recipe-product-pill {
-  display: inline-flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  padding: var(--space-2) var(--space-8);
-  border-radius: var(--radius-pill);
-  font-size: var(--font-size-xs);
+.slot-btn:hover {
+  background-color: var(--color-surface-elevated);
+  border-color: var(--color-primary);
+}
+
+/* Dish Card Form */
+.dish-card-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.form-label {
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
 }
 
-.recipe-actions-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-8);
+.form-input {
+  width: 100%;
+  height: var(--btn-height-sm);
+  background-color: var(--color-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  padding: 0 var(--space-12);
+  font-size: var(--font-size-input);
+  outline: none;
+  box-sizing: border-box;
 }
 
-.btn-text {
+.form-input:focus {
+  border-color: var(--color-primary);
+}
+
+.form-textarea {
+  width: 100%;
+  background-color: var(--color-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  padding: var(--space-10) var(--space-12);
+  font-size: var(--font-size-input);
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.form-textarea:focus {
+  border-color: var(--color-primary);
+}
+
+.nutrition-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-8);
+}
+
+.nutrition-input-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cell-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.card-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  margin-top: var(--space-8);
+}
+
+.btn-save-card {
+  width: 100%;
+  height: var(--btn-height-secondary);
+  border-radius: var(--radius-pill);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast);
+}
+
+.btn-save-card:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-delete-card {
+  width: 100%;
+  height: var(--btn-height-sm);
   background: transparent;
   border: none;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-primary);
-  cursor: pointer;
-  padding: 0;
-}
-
-.btn-text.text-danger {
   color: var(--danger);
-}
-
-.recipe-rename-box {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
-.rename-input {
-  min-height: var(--space-32);
-  font-size: var(--font-size-input);
-}
-</style>
-
-<style scoped>
-.dishes-view {
-  padding-bottom: var(--space-20);
-}
-
-.view-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-16);
-}
-
-.view-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.view-subtitle {
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-
-.add-dish-btn {
-  min-height: 40px;
-  padding: 0 var(--space-12);
-  font-size: 13.5px;
-}
-
-.tabs-switcher {
-  margin-bottom: var(--space-16);
-}
-
-.dishes-list,
-.frequent-dishes-list,
-.recipes-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
-}
-
-/* Frequent Dish Card */
-.frequent-dish-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
-}
-
-.fd-header-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  font-size: var(--font-size-sub);
   cursor: pointer;
+  transition: opacity var(--transition-fast);
 }
 
-.fd-title-area {
-  flex: 1;
-}
-
-.fd-name-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  flex-wrap: wrap;
-}
-
-.fd-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.badge-manual {
-  font-size: 11px;
-  background: rgba(234, 179, 8, 0.15);
-  color: #eab308;
-  border: 1px solid rgba(234, 179, 8, 0.3);
-  border-radius: var(--radius-pill);
-  padding: 1px 7px;
-  font-weight: 600;
-}
-
-.fd-meta {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.fd-nutrition {
-  font-size: 12.5px;
-  color: var(--text-dim);
-}
-
-.fd-kcal {
-  color: var(--info);
-  font-weight: 600;
-}
-
-.fd-macros {
-  color: var(--text-muted);
-}
-
-.fd-components {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.component-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  color: var(--text-primary);
-}
-
-.comp-weight {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.fd-actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-top: var(--space-8);
-  border-top: 1px solid var(--surface-border);
-}
-
-.cook-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-}
-
-/* Recipes List */
-.recipes-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  margin-bottom: var(--space-12);
-}
-
-.toggle-archived-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-}
-
-.recipe-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
-}
-
-.recipe-card.recipe-archived {
-  opacity: 0.65;
-  border-style: dashed;
-}
-
-.recipe-main-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.recipe-info {
-  flex: 1;
-}
-
-.recipe-name-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  margin-bottom: 6px;
-}
-
-.recipe-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.recipe-rename-box {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  margin-bottom: 6px;
-}
-
-.rename-input {
-  max-width: 260px;
-  min-height: 34px;
-}
-
-.recipe-products-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.recipe-product-pill {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-pill);
-  padding: 2px 8px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.recipe-actions-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-16);
-  padding-top: var(--space-8);
-  border-top: 1px solid var(--surface-border);
-}
-
-.btn-text {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.15s ease;
-}
-
-.btn-text:hover {
-  color: var(--text-primary);
+.btn-delete-card:hover:not(:disabled) {
   text-decoration: underline;
+  opacity: 0.9;
 }
 
-.btn-text.text-danger:hover {
-  color: var(--danger);
+/* Add Dish Modal */
+.add-dish-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+.field-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}
+
+.add-modal-actions {
+  display: flex;
+  gap: var(--space-10);
+}
+
+.btn-cancel {
+  flex: 1;
+  height: var(--btn-height-secondary);
+  border-radius: var(--radius-pill);
+  border: var(--border-width-hairline) solid var(--color-btn-outline-border);
+  background: transparent;
+  color: var(--color-btn-outline-text);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+}
+
+.btn-submit-add {
+  flex: 1;
+  height: var(--btn-height-secondary);
+  border-radius: var(--radius-pill);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  border: none;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-submit-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.loading-wrap,
+.empty-wrap {
+  padding: var(--space-40) var(--space-0);
+  display: flex;
+  justify-content: center;
 }
 </style>

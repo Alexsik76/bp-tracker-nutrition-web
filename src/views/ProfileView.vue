@@ -24,6 +24,11 @@ const paceKgPerWeek = ref<number>(0.75);
 const restrictions = ref<string>('');
 const dislikes = ref<string>('');
 
+// Three generation weights (0..1)
+const weightVariety = ref<number>(0.5);
+const weightBalance = ref<number>(0.5);
+const weightGoal = ref<number>(0.5);
+
 const sexOptions = [
   { label: 'Чоловік', value: 'male' },
   { label: 'Жінка', value: 'female' },
@@ -42,8 +47,11 @@ async function loadProfile() {
       paceKgPerWeek.value = profile.pace_kg_per_week;
       restrictions.value = profile.restrictions || '';
       dislikes.value = profile.dislikes || '';
+      weightVariety.value = profile.weight_variety ?? 0.5;
+      weightBalance.value = profile.weight_balance ?? 0.5;
+      weightGoal.value = profile.weight_goal ?? 0.5;
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.error('Error loading profile:', err);
     toastStore.show('Помилка завантаження профілю', 'error');
   } finally {
@@ -63,6 +71,9 @@ async function saveProfile() {
       pace_kg_per_week: Number(paceKgPerWeek.value),
       restrictions: restrictions.value.trim() || null,
       dislikes: dislikes.value.trim() || null,
+      weight_variety: Number(weightVariety.value),
+      weight_balance: Number(weightBalance.value),
+      weight_goal: Number(weightGoal.value),
     };
 
     await nutritionApi.upsertProfile(payload);
@@ -93,22 +104,36 @@ onMounted(() => {
 
 <template>
   <div class="profile-view">
-    <div class="view-header">
-      <button type="button" class="btn-back" @click="goBack" aria-label="Назад">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 18 9 12 15 6"></polyline>
+    <header class="profile-header">
+      <div class="header-left" role="button" tabindex="0" @click="goBack" @keydown.enter="goBack">
+        <svg
+          class="back-arrow"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
         </svg>
-      </button>
-      <h1 class="view-title">Профіль харчування</h1>
-    </div>
+        <h1 class="header-title">Профіль</h1>
+      </div>
+    </header>
 
-    <LoadingSpinner v-if="loading" text="Завантаження налаштувань..." />
+    <div v-if="loading" class="loading-wrap">
+      <LoadingSpinner text="Завантаження профілю..." />
+    </div>
 
     <form v-else @submit.prevent="saveProfile" class="profile-form">
       <!-- User info card -->
       <div v-if="authStore.user" class="card user-brief-card">
         <div class="user-avatar">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
             <circle cx="12" cy="7" r="4"></circle>
           </svg>
@@ -123,7 +148,7 @@ onMounted(() => {
 
       <!-- Physical parameters card -->
       <div class="card">
-        <div class="section-header">Фізичні показники</div>
+        <div class="section-title">Фізичні показники</div>
 
         <div class="form-group">
           <label class="form-label">Стать</label>
@@ -139,7 +164,7 @@ onMounted(() => {
               type="number"
               class="form-input num-mono"
               min="1920"
-              max="2020"
+              max="2026"
               required
             />
           </div>
@@ -200,13 +225,12 @@ onMounted(() => {
             max="2.0"
             required
           />
-          <span class="field-hint">Рекомендовано: 0.5 – 1.0 кг/тиждень</span>
         </div>
       </div>
 
       <!-- Health Restrictions & Dislikes -->
       <div class="card">
-        <div class="section-header">Обмеження та вподобання</div>
+        <div class="section-title">Обмеження та вподобання</div>
 
         <div class="form-group">
           <label class="form-label" for="restrictions">Особливості здоров'я / обмеження</label>
@@ -214,7 +238,8 @@ onMounted(() => {
             id="restrictions"
             v-model="restrictions"
             class="form-textarea"
-            placeholder="Наприклад: видалений жовчний міхур, помірно жирів за прийом"
+            rows="3"
+            placeholder="Наприклад: видалений жовчний міхур, помірна кількість жирів за прийом"
           ></textarea>
         </div>
 
@@ -224,34 +249,96 @@ onMounted(() => {
             id="dislikes"
             v-model="dislikes"
             class="form-textarea"
+            rows="3"
             placeholder="Наприклад: селера, кінза, надлишок молочних продуктів"
           ></textarea>
+        </div>
+      </div>
+
+      <!-- Generation Weights (Three sliders 0..1) -->
+      <div class="card">
+        <div class="section-title">Ваги генерації меню</div>
+        <p class="section-hint">Пріоритети моделі при підборі страв та продуктів (0..1)</p>
+
+        <!-- Slider 1: weight_variety -->
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Різноманітність</span>
+            <span class="slider-val num-mono">{{ weightVariety.toFixed(2) }}</span>
+          </div>
+          <input
+            v-model.number="weightVariety"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            class="weight-slider"
+          />
+          <div class="slider-scale">
+            <span>Звичне</span>
+            <span>Різноманітне</span>
+          </div>
+        </div>
+
+        <!-- Slider 2: weight_balance -->
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Збалансованість</span>
+            <span class="slider-val num-mono">{{ weightBalance.toFixed(2) }}</span>
+          </div>
+          <input
+            v-model.number="weightBalance"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            class="weight-slider"
+          />
+          <div class="slider-scale">
+            <span>Вільний склад</span>
+            <span>Ідеальний КБЖВ</span>
+          </div>
+        </div>
+
+        <!-- Slider 3: weight_goal -->
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Відповідність меті</span>
+            <span class="slider-val num-mono">{{ weightGoal.toFixed(2) }}</span>
+          </div>
+          <input
+            v-model.number="weightGoal"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            class="weight-slider"
+          />
+          <div class="slider-scale">
+            <span>М'яко</span>
+            <span>Строго до цілі</span>
+          </div>
         </div>
       </div>
 
       <!-- Save Button -->
       <button
         type="submit"
-        class="btn btn-primary btn-save"
+        class="btn-save-profile"
         :disabled="saving"
       >
-        <span v-if="saving">Збереження...</span>
-        <span v-else>Зберегти профіль</span>
+        <span v-if="!saving">Зберегти профіль</span>
+        <LoadingSpinner v-else :size="18" />
       </button>
 
       <!-- Logout Button -->
       <div class="logout-area">
         <button
           type="button"
-          class="btn btn-danger btn-logout"
+          class="btn-logout"
           @click="handleLogout"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-          </svg>
-          <span>Вийти з акаунту</span>
+          Вийти з акаунту
         </button>
       </div>
     </form>
@@ -260,86 +347,289 @@ onMounted(() => {
 
 <style scoped>
 .profile-view {
-  padding-bottom: var(--space-20);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--screen-max-width);
+  margin: var(--space-0) auto;
+  box-sizing: border-box;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg);
+  padding: calc(var(--space-14) + var(--safe-area-top)) var(--space-16) calc(var(--space-24) + var(--safe-area-bottom));
+  min-height: var(--screen-min-height);
 }
 
-.view-header {
+/* Header */
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-4) var(--space-16);
+  flex-shrink: 0;
+}
+
+.header-left {
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  margin-bottom: var(--space-16);
-}
-
-.btn-back {
-  background: transparent;
-  border: none;
-  color: var(--color-text-secondary);
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-  border-radius: var(--radius-sm);
+  user-select: none;
 }
 
-.btn-back:hover {
+.back-arrow {
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast);
+}
+
+.header-left:hover .back-arrow {
   color: var(--color-text-primary);
 }
 
-.view-title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
+.header-title {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-regular);
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+/* Cards */
+.card {
+  background-color: var(--color-surface);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14);
 }
 
 .user-brief-card {
-  display: flex;
+  flex-direction: row;
   align-items: center;
   gap: var(--space-12);
   padding: var(--space-12) var(--space-16);
 }
 
 .user-avatar {
-  width: var(--space-40);
-  height: var(--space-40);
-  border-radius: var(--radius-control);
-  background: var(--color-primary-chip);
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: 50%;
+  background-color: var(--color-primary-chip);
   color: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
 }
 
 .user-email {
-  font-size: var(--font-size-input);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-name {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.section-title {
+  font-size: var(--font-size-sub);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
-.user-name {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-}
-
-.field-hint {
+.section-hint {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  margin-top: var(--space-2);
+  margin-top: calc(-1 * var(--space-8));
+  margin-bottom: var(--space-4);
+  line-height: var(--leading-normal);
 }
 
-.btn-save {
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.form-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.form-input {
   width: 100%;
-  font-size: var(--font-size-md);
+  height: var(--btn-height-secondary);
+  background-color: var(--color-surface-elevated);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  padding: 0 var(--space-12);
+  font-size: var(--font-size-input);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+}
+
+.form-textarea {
+  width: 100%;
+  background-color: var(--color-surface-elevated);
+  border: var(--border-width-hairline) solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  padding: var(--space-10) var(--space-12);
+  font-size: var(--font-size-input);
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.form-textarea:focus {
+  border-color: var(--color-primary);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-12);
+}
+
+/* Sliders */
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-0);
+}
+
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-sub);
+}
+
+.slider-name {
+  color: var(--color-text-secondary);
+}
+
+.slider-val {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.weight-slider {
+  width: 100%;
+  height: var(--slider-track-height);
+  border-radius: var(--radius-xs);
+  background: var(--color-progress-track);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  margin: var(--space-4) var(--space-0);
+}
+
+.weight-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: pointer;
+  box-shadow: var(--slider-thumb-shadow);
+}
+
+.weight-slider::-moz-range-thumb {
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--slider-thumb-shadow);
+}
+
+.slider-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Save & Logout */
+.btn-save-profile {
+  width: 100%;
+  height: var(--btn-height-primary);
+  border-radius: var(--radius-pill);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-top: var(--space-8);
+  transition: background-color var(--transition-fast);
+}
+
+.btn-save-profile:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-save-profile:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .logout-area {
-  margin-top: var(--space-28);
   display: flex;
   justify-content: center;
+  margin-top: var(--space-8);
 }
 
 .btn-logout {
-  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  font-size: var(--font-size-sub);
+  cursor: pointer;
+  padding: var(--space-8);
+  transition: opacity var(--transition-fast);
+}
+
+.btn-logout:hover {
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+.loading-wrap {
+  padding: var(--space-48) 0;
+  display: flex;
+  justify-content: center;
 }
 </style>

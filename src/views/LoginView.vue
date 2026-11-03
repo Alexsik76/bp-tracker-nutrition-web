@@ -180,16 +180,16 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  min-height: var(--screen-min-height);
   padding: var(--space-16);
   background-color: var(--bg-primary);
 }
 
 .login-card {
   width: 100%;
-  max-width: 400px;
+  max-width: var(--login-card-max-width);
   background: var(--surface);
-  border: 1px solid var(--surface-border);
+  border: var(--border-width-base) solid var(--surface-border);
   border-radius: var(--radius-card);
   padding: var(--space-28) var(--space-20);
   display: flex;
@@ -205,8 +205,8 @@ onMounted(async () => {
 }
 
 .logo-icon {
-  width: 56px;
-  height: 56px;
+  width: var(--logo-size);
+  height: var(--logo-size);
   border-radius: var(--radius-control);
   background: var(--primary-bg-chip);
   color: var(--primary);
@@ -217,14 +217,14 @@ onMounted(async () => {
 }
 
 .login-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--font-size-display-sm);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
-  margin-bottom: 2px;
+  margin-bottom: var(--space-2);
 }
 
 .login-subtitle {
-  font-size: 13px;
+  font-size: var(--font-size-sub);
   color: var(--text-muted);
 }
 
@@ -233,11 +233,11 @@ onMounted(async () => {
   align-items: center;
   gap: var(--space-12);
   background: var(--danger-bg-chip);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  border: var(--border-width-base) solid var(--color-danger-border);
   color: var(--danger);
   padding: var(--space-12);
   border-radius: var(--radius-control);
-  font-size: 13px;
+  font-size: var(--font-size-sub);
   margin-bottom: var(--space-20);
 }
 
@@ -248,33 +248,33 @@ onMounted(async () => {
 
 .btn-passkey {
   width: 100%;
-  font-size: 16px;
+  font-size: var(--font-size-md);
 }
 
 .btn-sm {
-  min-height: 38px;
-  font-size: 13px;
+  min-height: var(--btn-height-input);
+  font-size: var(--font-size-sub);
 }
 
 .divider {
   display: flex;
   align-items: center;
   text-align: center;
-  margin: var(--space-20) 0;
+  margin: var(--space-20) var(--space-0);
 }
 
 .divider::before,
 .divider::after {
   content: '';
   flex: 1;
-  border-bottom: 1px solid var(--surface-border);
+  border-bottom: var(--border-width-base) solid var(--surface-border);
 }
 
 .divider-text {
-  padding: 0 var(--space-12);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  padding: var(--space-0) var(--space-12);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-label);
   text-transform: uppercase;
   color: var(--text-dim);
 }
@@ -291,8 +291,8 @@ onMounted(async () => {
   text-align: center;
   padding: var(--space-16);
   border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--surface-border);
+  background: var(--color-row-active-bg);
+  border: var(--border-width-base) solid var(--surface-border);
 }
 
 .magic-icon {
@@ -301,22 +301,22 @@ onMounted(async () => {
 }
 
 .magic-sent-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
   margin-bottom: var(--space-4);
 }
 
 .magic-sent-desc {
-  font-size: 13px;
+  font-size: var(--font-size-sub);
   color: var(--text-muted);
   margin-bottom: var(--space-16);
-  line-height: 1.4;
+  line-height: var(--leading-normal);
 }
 
 .dev-bypass-box {
   margin-top: var(--space-28);
   padding-top: var(--space-16);
-  border-top: 1px dashed var(--surface-border);
+  border-top: var(--border-width-base) dashed var(--surface-border);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -324,10 +324,10 @@ onMounted(async () => {
 }
 
 .dev-bypass-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   color: var(--warning);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--letter-spacing-caps);
 }
 </style>
