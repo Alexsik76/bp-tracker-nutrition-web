@@ -168,14 +168,17 @@ export interface MenuRead {
   evaluations?: MealEvaluationRead[];
 }
 
+export type SuggestionMode = 'suggest' | 'log';
+
 export interface SuggestionRequest {
   text: string | null;
   date: string; // YYYY-MM-DD
   at: string; // ISO with timezone offset
+  mode?: SuggestionMode;
 }
 
 export interface SuggestionResponse {
-  intent: 'suggest' | 'log';
+  mode: SuggestionMode;
   menu: MenuRead;
 }
 

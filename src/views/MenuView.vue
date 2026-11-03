@@ -112,19 +112,14 @@ async function handleSuggest() {
       text: textToSend,
       date: formatLocalDate(),
       at: nowLocalIso(),
+      mode: 'suggest',
     });
 
-    if (res.intent === 'log') {
-      toastStore.show('Запис додано до щоденника', 'success');
-      requestText.value = '';
-      await fetchJournal();
-    } else {
-      currentSuggestion.value = res.menu;
-      currentState.value = 'suggestion';
-      requestText.value = '';
-      clarifyText.value = '';
-      await fetchJournal();
-    }
+    currentSuggestion.value = res.menu;
+    currentState.value = 'suggestion';
+    requestText.value = '';
+    clarifyText.value = '';
+    await fetchJournal();
   } catch (err: unknown) {
     console.error('Failed to request suggestion:', err);
     toastStore.show(err instanceof Error ? err.message : 'Помилка отримання пропозиції', 'error');
@@ -167,18 +162,13 @@ async function handleRegenerate() {
       text: textToSend,
       date: formatLocalDate(),
       at: nowLocalIso(),
+      mode: 'suggest',
     });
 
-    if (res.intent === 'log') {
-      toastStore.show('Запис додано до щоденника', 'success');
-      clarifyText.value = '';
-      await fetchJournal();
-    } else {
-      currentSuggestion.value = res.menu;
-      currentState.value = 'suggestion';
-      clarifyText.value = '';
-      await fetchJournal();
-    }
+    currentSuggestion.value = res.menu;
+    currentState.value = 'suggestion';
+    clarifyText.value = '';
+    await fetchJournal();
   } catch (err: unknown) {
     console.error('Failed to regenerate suggestion:', err);
     toastStore.show(err instanceof Error ? err.message : 'Помилка генерації іншої пропозиції', 'error');

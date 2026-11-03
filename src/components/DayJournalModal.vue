@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
 import ModalSheet from './ModalSheet.vue';
 import LoadingSpinner from './LoadingSpinner.vue';
 import { nutritionApi } from '../services/api';
@@ -10,6 +10,7 @@ import {
   addDays,
   isToday,
   formatTime24,
+  nowLocalIso,
 } from '../utils/date';
 import { mealTypeLabel } from '../utils/mealTypes';
 import type {
@@ -39,6 +40,47 @@ const journalData = ref<JournalResponse | null>(null);
 const editingItemId = ref<string | null>(null);
 const editingGrams = ref<number | null>(null);
 const savingGrams = ref(false);
+
+// Recording eaten meal state
+const logText = ref('');
+const submittingLog = ref(false);
+const highlightedMealId = ref<string | null>(null);
+let removeHighlightListeners: (() => void) | null = null;
+
+function clearHighlight() {
+  if (removeHighlightListeners) {
+    removeHighlightListeners();
+    removeHighlightListeners = null;
+  }
+  highlightedMealId.value = null;
+}
+
+function setHighlight(mealId: string) {
+  clearHighlight();
+  highlightedMealId.value = mealId;
+
+  const onUserAction = () => {
+    clearHighlight();
+  };
+
+  const timer = setTimeout(() => {
+    window.addEventListener('pointerdown', onUserAction, { capture: true, once: true });
+    window.addEventListener('keydown', onUserAction, { capture: true, once: true });
+
+    removeHighlightListeners = () => {
+      window.removeEventListener('pointerdown', onUserAction, { capture: true });
+      window.removeEventListener('keydown', onUserAction, { capture: true });
+    };
+  }, 100);
+
+  const prevCleanup = removeHighlightListeners;
+  removeHighlightListeners = () => {
+    clearTimeout(timer);
+    if (prevCleanup) prevCleanup();
+    window.removeEventListener('pointerdown', onUserAction, { capture: true });
+    window.removeEventListener('keydown', onUserAction, { capture: true });
+  };
+}
 
 // Evaluation explanation popup
 interface ExplanationState {
@@ -105,6 +147,7 @@ watch(
     } else {
       editingItemId.value = null;
       activeExplanation.value = null;
+      clearHighlight();
     }
   }
 );
@@ -112,20 +155,24 @@ watch(
 watch(selectedDate, (newDate) => {
   if (props.show) {
     editingItemId.value = null;
+    clearHighlight();
     loadJournalForDate(newDate);
   }
 });
 
 function prevDay() {
+  clearHighlight();
   selectedDate.value = addDays(selectedDate.value, -1);
 }
 
 function nextDay() {
   if (isToday(selectedDate.value)) return;
+  clearHighlight();
   selectedDate.value = addDays(selectedDate.value, 1);
 }
 
 function startEditGrams(item: MenuItemRead) {
+  clearHighlight();
   editingItemId.value = item.id;
   editingGrams.value = item.portion_g ?? 100;
 }
@@ -158,6 +205,7 @@ async function saveGrams(item: MenuItemRead) {
 }
 
 async function handleDeleteMeal(meal: MenuRead) {
+  clearHighlight();
   if (!confirm(`Видалити цей прийом їжі (${mealTypeLabel(meal.meal_type)})?`)) {
     return;
   }
@@ -178,6 +226,7 @@ function openEvaluationExplanation(
   choice: string,
   title?: string
 ) {
+  clearHighlight();
   const def = CRITERIA_DEFINITIONS[criterionKey];
   const displayTitle = title || def?.title || criterionKey;
   const explanationText =
@@ -213,6 +262,56 @@ function mealProtein(meal: MenuRead): number {
 const eatenMeals = computed(() => {
   if (!journalData.value) return [];
   return journalData.value.meals.filter((m) => m.state === 'eaten');
+});
+
+async function handleLogMeal() {
+  const textToSend = logText.value.trim();
+  if (!textToSend || submittingLog.value) return;
+
+  submittingLog.value = true;
+  try {
+    const res = await nutritionApi.createSuggestion({
+      text: textToSend,
+      date: selectedDate.value,
+      at: nowLocalIso(),
+      mode: 'log',
+    });
+
+    // Update journal list and totals without full-modal reload
+    const freshJournal = await nutritionApi.getJournal(selectedDate.value);
+    if (!freshJournal.meals.some((m) => m.id === res.menu.id)) {
+      freshJournal.meals.push(res.menu);
+    }
+    journalData.value = freshJournal;
+
+    // Highlight the new meal until next user action
+    setHighlight(res.menu.id);
+
+    // Clear input field on success
+    logText.value = '';
+
+    // Notify parent to refresh status line
+    emit('updated');
+
+    // Scroll new meal into view smoothly
+    await nextTick();
+    const el = document.querySelector(`[data-meal-id="${res.menu.id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  } catch (err) {
+    console.error('Failed to log meal:', err);
+    toastStore.show(
+      err instanceof Error ? err.message : 'Не вдалося записати прийом їжі',
+      'error'
+    );
+  } finally {
+    submittingLog.value = false;
+  }
+}
+
+onUnmounted(() => {
+  clearHighlight();
 });
 </script>
 
@@ -312,7 +411,9 @@ const eatenMeals = computed(() => {
           <div
             v-for="meal in eatenMeals"
             :key="meal.id"
+            :data-meal-id="meal.id"
             class="meal-card"
+            :class="{ 'is-highlighted': meal.id === highlightedMealId }"
           >
             <!-- Meal Card Header -->
             <div class="meal-header">
@@ -423,6 +524,25 @@ const eatenMeals = computed(() => {
             </div>
           </div>
         </div>
+
+        <!-- Record Eaten Food Form -->
+        <form class="log-meal-form" @submit.prevent="handleLogMeal">
+          <input
+            v-model="logText"
+            type="text"
+            class="log-meal-input"
+            placeholder="Що з'їли? Наприклад: гречка 200 г, курятина 175 г"
+            :disabled="submittingLog"
+          />
+          <button
+            type="submit"
+            class="btn-log-meal"
+            :disabled="submittingLog || !logText.trim()"
+          >
+            <span v-if="!submittingLog">Записати</span>
+            <LoadingSpinner v-else :size="16" />
+          </button>
+        </form>
       </template>
 
       <!-- Explanation Popover/Modal -->
@@ -642,6 +762,13 @@ const eatenMeals = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-10);
+  transition: border-color var(--transition-normal), background-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.meal-card.is-highlighted {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-chip);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 .meal-header {
@@ -843,5 +970,75 @@ const eatenMeals = computed(() => {
   line-height: var(--leading-relaxed);
   color: var(--color-text-secondary);
   margin: 0;
+}
+
+/* Record Eaten Food Form */
+.log-meal-form {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+  margin-top: var(--space-6);
+  padding-top: var(--space-12);
+  border-top: var(--border-width-base) solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.log-meal-input {
+  flex: 1;
+  min-width: 0;
+  height: var(--btn-height-secondary);
+  padding: 0 var(--space-12);
+  background-color: var(--color-bg);
+  border: var(--border-width-base) solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-input);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast);
+}
+
+.log-meal-input:focus {
+  border-color: var(--color-primary);
+}
+
+.log-meal-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.log-meal-input:disabled {
+  opacity: 0.6;
+}
+
+.btn-log-meal {
+  height: var(--btn-height-secondary);
+  padding: 0 var(--space-16);
+  border-radius: var(--radius-control);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background-color var(--transition-fast);
+}
+
+.btn-log-meal:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-log-meal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-log-meal :deep(.spinner-wrap) {
+  padding: 0;
 }
 </style>
