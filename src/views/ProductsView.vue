@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { nutritionApi } from '../services/api';
 import { useToastStore } from '../stores/toast';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
@@ -14,6 +15,7 @@ import type {
   ProductPreference,
 } from '../types/nutrition';
 
+const router = useRouter();
 const toastStore = useToastStore();
 
 const products = ref<ProductRead[]>([]);
@@ -150,6 +152,10 @@ async function handleEstimateProduct(product: ProductRead) {
   }
 }
 
+function goBack() {
+  router.push('/menu');
+}
+
 onMounted(() => {
   loadProducts();
 });
@@ -158,9 +164,16 @@ onMounted(() => {
 <template>
   <div class="products-view">
     <div class="view-header">
-      <div>
-        <h1 class="view-title">Продукти</h1>
-        <p class="view-subtitle">Запаси та вподобання для ШІ-генератора</p>
+      <div class="title-wrap">
+        <button type="button" class="btn-back" @click="goBack" aria-label="Назад">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <div>
+          <h1 class="view-title">Продукти</h1>
+          <p class="view-subtitle">Запаси та вподобання для ШІ-генератора</p>
+        </div>
       </div>
       <button class="btn btn-primary add-product-btn" @click="openCreateModal">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -230,6 +243,28 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-16);
+}
+
+.title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.btn-back {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+}
+
+.btn-back:hover {
+  color: var(--color-text-primary);
 }
 
 .view-title {

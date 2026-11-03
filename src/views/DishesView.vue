@@ -1,33 +1,38 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { nutritionApi, ApiError } from '../services/api';
 import { useToastStore } from '../stores/toast';
-import { notifyStockWarnings } from '../utils/stockWarnings';
 import SegmentedControl from '../components/SegmentedControl.vue';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 import EmptyState from '../components/EmptyState.vue';
 import DishCard from '../components/dishes/DishCard.vue';
 import DishCreateModalSheet from '../components/dishes/DishCreateModalSheet.vue';
 import DishEditModalSheet from '../components/dishes/DishEditModalSheet.vue';
-import FrequentDishModalSheet from '../components/dishes/FrequentDishModalSheet.vue';
-import { formatLocalDate } from '../utils/date';
 import type {
   DishRead,
   DishCreate,
   DishUpdate,
-  FrequentDishRead,
-  FrequentDishUpdate,
   RecipeRead,
 } from '../types/nutrition';
 
-type DishesTab = 'fridge' | 'frequent' | 'recipes';
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean;
+  }>(),
+  {
+    embedded: false,
+  }
+);
 
+const router = useRouter();
 const toastStore = useToastStore();
+
+type DishesTab = 'fridge' | 'recipes';
 
 const activeTab = ref<DishesTab>('fridge');
 const tabOptions = [
   { label: 'Холодильник', value: 'fridge' },
-  { label: 'Часті страви', value: 'frequent' },
   { label: 'Рецепти', value: 'recipes' },
 ];
 
@@ -41,14 +46,7 @@ const isEditModalOpen = ref(false);
 const editingDish = ref<DishRead | null>(null);
 const savingDish = ref(false);
 
-// Tab 2: Frequent Dishes
-const frequentDishes = ref<FrequentDishRead[]>([]);
-const isFrequentModalOpen = ref(false);
-const editingFrequentDish = ref<FrequentDishRead | null>(null);
-const savingFrequentDish = ref(false);
-const cookingFrequentDishId = ref<string | null>(null);
-
-// Tab 3: Recipes
+// Tab 2: Recipes
 const recipes = ref<RecipeRead[]>([]);
 const showArchivedRecipes = ref(false);
 const renamingRecipeId = ref<string | null>(null);
@@ -72,8 +70,6 @@ async function loadTabData() {
   try {
     if (activeTab.value === 'fridge') {
       dishes.value = await nutritionApi.getDishes(true);
-    } else if (activeTab.value === 'frequent') {
-      frequentDishes.value = await nutritionApi.getFrequentDishes();
     } else if (activeTab.value === 'recipes') {
       recipes.value = await nutritionApi.getRecipes(showArchivedRecipes.value);
     }
@@ -105,33 +101,12 @@ function openEditDish(dish: DishRead) {
   isEditModalOpen.value = true;
 }
 
-async function handleSaveCreateDish({ data, saveAsFrequent }: { data: DishCreate; saveAsFrequent: boolean }) {
+async function handleSaveCreateDish({ data }: { data: DishCreate; saveAsFrequent: boolean }) {
   savingDish.value = true;
   try {
     const created = await nutritionApi.createDish(data);
-    notifyStockWarnings(created.stock_warnings);
-
     dishes.value.unshift(created);
-
-    if (saveAsFrequent) {
-      try {
-        await nutritionApi.createFrequentDish({
-          recipe_id: created.recipe_id,
-          cooked_weight_g: created.cooked_weight_g,
-          components: created.components.map((c) => ({
-            product_id: c.product_id,
-            weight_g: c.weight_g,
-          })),
-        });
-        toastStore.show('Страву приготовлено та додано до частих', 'success');
-      } catch (freqErr) {
-        console.error('Failed to save frequent dish:', freqErr);
-        toastStore.show('Страву приготовлено, але не вдалося зберегти як часту', 'warning');
-      }
-    } else {
-      toastStore.show('Страву приготовлено', 'success');
-    }
-
+    toastStore.show('Страву приготовлено', 'success');
     isCreateModalOpen.value = false;
   } catch (err: unknown) {
     console.error('Create dish error:', err);
@@ -146,8 +121,6 @@ async function handleSaveEditDish(payload: DishUpdate) {
   savingDish.value = true;
   try {
     const updated = await nutritionApi.updateDish(editingDish.value.id, payload);
-    notifyStockWarnings(updated.stock_warnings);
-
     const index = dishes.value.findIndex((d) => d.id === editingDish.value?.id);
     if (index !== -1) {
       dishes.value[index] = updated;
@@ -237,86 +210,6 @@ async function adjustRemaining({ dish, deltaG }: { dish: DishRead; deltaG: numbe
   }
 }
 
-// --- Frequent Dishes Actions ---
-function openFrequentDishSheet(fd: FrequentDishRead) {
-  editingFrequentDish.value = fd;
-  isFrequentModalOpen.value = true;
-}
-
-async function handleCookFrequentDish(fd: FrequentDishRead) {
-  cookingFrequentDishId.value = fd.id;
-  try {
-    const cooked = await nutritionApi.cookFrequentDish(fd.id, {
-      cooked_on: formatLocalDate(),
-    });
-    notifyStockWarnings(cooked.stock_warnings);
-    toastStore.show(`Приготовано «${fd.recipe_name}» (${fd.cooked_weight_g} г)`, 'success');
-  } catch (err: unknown) {
-    console.error('Error cooking frequent dish:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка приготування', 'error');
-  } finally {
-    cookingFrequentDishId.value = null;
-  }
-}
-
-async function handleSaveFrequentDish(payload: FrequentDishUpdate) {
-  if (!editingFrequentDish.value) return;
-  savingFrequentDish.value = true;
-  try {
-    const updated = await nutritionApi.updateFrequentDish(editingFrequentDish.value.id, payload);
-    const index = frequentDishes.value.findIndex((f) => f.id === editingFrequentDish.value?.id);
-    if (index !== -1) {
-      frequentDishes.value[index] = updated;
-    }
-    editingFrequentDish.value = updated;
-    toastStore.show('Часту страву оновлено', 'success');
-    isFrequentModalOpen.value = false;
-  } catch (err: unknown) {
-    console.error('Update frequent dish error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка оновлення', 'error');
-  } finally {
-    savingFrequentDish.value = false;
-  }
-}
-
-async function handleResetFrequentNutrition() {
-  if (!editingFrequentDish.value) return;
-  savingFrequentDish.value = true;
-  try {
-    const updated = await nutritionApi.updateFrequentDish(editingFrequentDish.value.id, {
-      reset_nutrition: true,
-    });
-    const index = frequentDishes.value.findIndex((f) => f.id === editingFrequentDish.value?.id);
-    if (index !== -1) {
-      frequentDishes.value[index] = updated;
-    }
-    editingFrequentDish.value = updated;
-    toastStore.show('КБЖВ перераховано за складниками', 'success');
-  } catch (err: unknown) {
-    console.error('Reset frequent nutrition error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка перерахунку', 'error');
-  } finally {
-    savingFrequentDish.value = false;
-  }
-}
-
-async function handleDeleteFrequentDish(id: string) {
-  if (!confirm('Видалити цю часту страву?')) return;
-  savingFrequentDish.value = true;
-  try {
-    await nutritionApi.deleteFrequentDish(id);
-    frequentDishes.value = frequentDishes.value.filter((f) => f.id !== id);
-    toastStore.show('Часту страву видалено', 'success');
-    isFrequentModalOpen.value = false;
-    editingFrequentDish.value = null;
-  } catch (err: unknown) {
-    console.error('Delete frequent dish error:', err);
-    toastStore.show(err instanceof Error ? err.message : 'Помилка видалення', 'error');
-  } finally {
-    savingFrequentDish.value = false;
-  }
-}
-
 // --- Recipes Actions ---
 function startRenameRecipe(recipe: RecipeRead) {
   renamingRecipeId.value = recipe.id;
@@ -401,6 +294,10 @@ async function handleDeleteRecipe(recipe: RecipeRead) {
   }
 }
 
+function goBack() {
+  router.push('/menu');
+}
+
 onMounted(() => {
   loadProductsMap();
   loadTabData();
@@ -408,11 +305,18 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="dishes-view">
+  <div class="dishes-view" :class="{ 'is-embedded': props.embedded }">
     <div class="view-header">
-      <div>
-        <h1 class="view-title">Страви та рецепти</h1>
-        <p class="view-subtitle">Холодильник, часті страви та шаблони рецептів</p>
+      <div class="title-wrap">
+        <button v-if="!props.embedded" type="button" class="btn-back" @click="goBack" aria-label="Назад">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <div>
+          <h1 class="view-title">Страви та рецепти</h1>
+          <p class="view-subtitle">Холодильник та шаблони рецептів</p>
+        </div>
       </div>
 
       <button
@@ -458,89 +362,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- TAB 2: FREQUENT DISHES -->
-    <div v-else-if="activeTab === 'frequent'">
-      <div v-if="frequentDishes.length === 0">
-        <EmptyState
-          title="Немає частих страв"
-          description="Часті страви створюються під час приготування або для швидкого повторного готування у закріплених меню"
-          action-label="Приготувати нову страву"
-          @action="activeTab = 'fridge'; openCreateDish()"
-        />
-      </div>
-
-      <div v-else class="frequent-dishes-list">
-        <div
-          v-for="fd in frequentDishes"
-          :key="fd.id"
-          class="card frequent-dish-card"
-        >
-          <div class="fd-header-row" @click="openFrequentDishSheet(fd)">
-            <div class="fd-title-area">
-              <div class="fd-name-row">
-                <h3 class="fd-name">{{ fd.recipe_name }}</h3>
-                <span v-if="fd.nutrition_overridden" class="badge-manual" title="КБЖВ скориговано вручну">
-                  виправлено вручну
-                </span>
-              </div>
-              <div class="fd-meta num-mono">
-                Готова вага: {{ fd.cooked_weight_g }} г
-              </div>
-            </div>
-
-            <button
-              type="button"
-              class="btn-icon edit-action-btn"
-              title="Редагувати часту страву"
-              @click.stop="openFrequentDishSheet(fd)"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="1"></circle>
-                <circle cx="19" cy="12" r="1"></circle>
-                <circle cx="5" cy="12" r="1"></circle>
-              </svg>
-            </button>
-          </div>
-
-          <!-- Nutrition row -->
-          <div v-if="fd.kcal !== null && fd.kcal !== undefined" class="fd-nutrition num-mono">
-            <span class="fd-kcal">{{ Math.round(fd.kcal) }} ккал / 100 г</span>
-            <span v-if="fd.protein_g !== null || fd.fat_g !== null || fd.carbs_g !== null" class="fd-macros">
-              · Б: {{ fd.protein_g ?? 0 }} г · Ж: {{ fd.fat_g ?? 0 }} г · В: {{ fd.carbs_g ?? 0 }} г
-            </span>
-          </div>
-
-          <!-- Components chips -->
-          <div v-if="fd.components && fd.components.length > 0" class="fd-components">
-            <span
-              v-for="c in fd.components"
-              :key="c.id"
-              class="component-chip"
-            >
-              {{ productsMap[c.product_id] || 'Продукт' }}
-              <span class="num-mono comp-weight">({{ c.weight_g }} г)</span>
-            </span>
-          </div>
-
-          <!-- Actions: Cook button -->
-          <div class="fd-actions-row">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm cook-btn"
-              :disabled="cookingFrequentDishId === fd.id"
-              @click="handleCookFrequentDish(fd)"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-              </svg>
-              <span>{{ cookingFrequentDishId === fd.id ? 'Готуємо...' : 'Приготувати' }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 3: RECIPES -->
+    <!-- TAB 2: RECIPES -->
     <div v-else-if="activeTab === 'recipes'">
       <!-- Recipes Toolbar: Toggle Archived -->
       <div class="recipes-toolbar">
@@ -666,18 +488,173 @@ onMounted(() => {
       @save-nutrition="handleSaveDishManualNutrition"
       @delete="handleDeleteDish"
     />
-
-    <FrequentDishModalSheet
-      :show="isFrequentModalOpen"
-      :frequent-dish="editingFrequentDish"
-      :saving="savingFrequentDish"
-      @close="isFrequentModalOpen = false; editingFrequentDish = null"
-      @save="handleSaveFrequentDish"
-      @reset-nutrition="handleResetFrequentNutrition"
-      @delete="handleDeleteFrequentDish"
-    />
   </div>
 </template>
+
+<style scoped>
+.dishes-view {
+  padding-bottom: var(--space-20);
+}
+
+.dishes-view.is-embedded {
+  padding-bottom: var(--space-48);
+}
+
+.view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-16);
+}
+
+.title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.btn-back {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+}
+
+.btn-back:hover {
+  color: var(--color-text-primary);
+}
+
+.view-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.view-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.add-dish-btn {
+  min-height: var(--space-40);
+  padding: 0 var(--space-12);
+  font-size: var(--font-size-sub);
+}
+
+.tabs-switcher {
+  margin-bottom: var(--space-16);
+}
+
+.dishes-list,
+.recipes-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+/* Recipes Toolbar */
+.recipes-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-12);
+}
+
+.toggle-archived-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.recipe-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.recipe-card.recipe-archived {
+  opacity: 0.6;
+}
+
+.recipe-main-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.recipe-info {
+  flex: 1;
+}
+
+.recipe-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.recipe-name {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.recipe-products-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin-top: var(--space-6);
+}
+
+.recipe-product-pill {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.recipe-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-8);
+}
+
+.btn-text {
+  background: transparent;
+  border: none;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-text.text-danger {
+  color: var(--danger);
+}
+
+.recipe-rename-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.rename-input {
+  min-height: var(--space-32);
+  font-size: var(--font-size-input);
+}
+</style>
 
 <style scoped>
 .dishes-view {

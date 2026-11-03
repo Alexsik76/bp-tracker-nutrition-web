@@ -1,50 +1,167 @@
 :root {
-  /* Dark Theme Default */
-  --bg-primary: #0D1117;
-  --surface: #141920;
-  --surface-elevated: #1B222D;
-  --surface-border: rgba(255, 255, 255, 0.08);
-  --nav-bar: rgba(17, 21, 28, 0.92);
-  --text-primary: #FFFFFF;
-  --text-muted: rgba(255, 255, 255, 0.45);
-  --text-dim: rgba(255, 255, 255, 0.25);
+  /* Minimalist Muted-Blue Dark Palette (Mockup) */
+  --color-bg: #111418;
+  --color-surface: #1c2027;
+  --color-surface-elevated: #232832;
+  --color-border: #2a2f38;
+  --color-border-strong: #4a505c;
 
-  /* Primary Accent */
-  --primary: #818CF8;
-  --on-primary: #0B1020;
-  --primary-hover: #98A2F9;
-  --primary-bg-chip: rgba(129, 140, 248, 0.15);
+  --color-text-primary: #e2e2e9;
+  --color-text-secondary: #c2c6d2;
+  --color-text-muted: #8b909b;
+  --color-text-dim: #5c626f;
 
-  /* Semantic Colors & Chips */
-  --success: #22C55E;
-  --success-bg-chip: rgba(34, 197, 94, 0.12);
-  --warning: #FB923C;
-  --warning-alt: #F97316;
-  --warning-bg-chip: rgba(249, 115, 22, 0.12);
-  --danger: #EF4444;
-  --danger-bg-chip: rgba(239, 68, 68, 0.12);
-  --info: #38BDF8;
-  --info-bg-chip: rgba(56, 189, 248, 0.12);
+  --color-primary: #9fc0ea;
+  --color-on-primary: #0a2440;
+  --color-primary-hover: #b5d2f6;
+  --color-primary-chip: rgba(159, 192, 234, 0.15);
 
-  /* Spacing Scale (4 / 8 / 12 / 16 / 20 / 28) */
+  --color-progress-track: #2a2f38;
+  --color-progress-fill: #8fb2e0;
+
+  --color-dot-inactive: #3a404b;
+  --color-dot-active: #9fc0ea;
+
+  --color-btn-outline-border: #4a505c;
+  --color-btn-outline-text: #c2c6d2;
+  --color-btn-outline-hover-bg: rgba(255, 255, 255, 0.05);
+
+  /* Evaluator semantic levels */
+  --color-eval-green: #91d68b;
+  --color-eval-green-bg: rgba(145, 214, 139, 0.16);
+  --color-eval-yellow: #fab219;
+  --color-eval-yellow-bg: rgba(250, 178, 25, 0.16);
+  --color-eval-red: #f09595;
+  --color-eval-red-bg: rgba(240, 149, 149, 0.16);
+  --color-eval-uncertain: #8b909b;
+  --color-eval-uncertain-bg: rgba(139, 144, 155, 0.16);
+
+  /* Semantic aliases */
+  --success: var(--color-eval-green);
+  --success-bg-chip: var(--color-eval-green-bg);
+  --warning: var(--color-eval-yellow);
+  --warning-bg-chip: var(--color-eval-yellow-bg);
+  --danger: var(--color-eval-red);
+  --danger-bg-chip: var(--color-eval-red-bg);
+  --info: var(--color-primary);
+  --info-bg-chip: var(--color-primary-chip);
+
+  /* Backward compatibility aliases */
+  --bg-primary: var(--color-bg);
+  --surface: var(--color-surface);
+  --surface-elevated: var(--color-surface-elevated);
+  --surface-border: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --nav-bar: rgba(17, 20, 24, 0.94);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --text-dim: var(--color-text-dim);
+  --primary: var(--color-primary);
+  --on-primary: var(--color-on-primary);
+  --primary-hover: var(--color-primary-hover);
+  --primary-bg-chip: var(--color-primary-chip);
+
+  /* Spacing Scale */
+  --space-0: 0px;
+  --space-1: 1px;
+  --space-2: 2px;
+  --space-3: 3px;
   --space-4: 4px;
+  --space-6: 6px;
+  --space-7: 7px;
   --space-8: 8px;
+  --space-10: 10px;
   --space-12: 12px;
+  --space-14: 14px;
   --space-16: 16px;
+  --space-18: 18px;
   --space-20: 20px;
+  --space-22: 22px;
+  --space-24: 24px;
   --space-28: 28px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
 
   /* Geometry & Radii */
-  --radius-card: 18px;
-  --radius-control: 14px;
-  --radius-pill: 9999px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-control: 8px;
+  --radius-md: 12px;
+  --radius-card: 16px;
+  --radius-pill: 22px;
+  --radius-btn: 24px;
+  --radius-container: 28px;
+  --radius-full: 9999px;
 
   /* Typography */
-  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', Consolas, monospace;
 
-  /* Touch Target */
-  --touch-target-min: 48px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-sub: 13px;
+  --font-size-input: 14px;
+  --font-size-base: 15px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-normal: 1.4;
+  --leading-relaxed: 1.5;
+
+  /* Control Heights & Sizes */
+  --status-bar-height: 3px;
+  --btn-height-primary: 48px;
+  --btn-height-secondary: 44px;
+  --btn-height-sm: 36px;
+  --btn-height-xs: 28px;
+  --input-height-bottom: 44px;
+  --textarea-min-height: 150px;
+  --dropdown-min-width: 160px;
+
+  --dot-active-width: 18px;
+  --dot-inactive-width: 6px;
+  --dot-height: 4px;
+
+  --icon-size-xs: 14px;
+  --icon-size-sm: 16px;
+  --icon-size-md: 18px;
+  --icon-size-lg: 22px;
+  --icon-size-xl: 24px;
+
+  /* Borders */
+  --border-width-hairline: 0.5px;
+  --border-width-base: 1px;
+  --border-width-focus: 2px;
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+
+  /* Touch & Screen Dimensions */
+  --touch-target-min: 44px;
+  --screen-max-width: 480px;
+  --screen-min-height: 100vh;
+  --screen-phone-width: 390px;
+  --screen-phone-height: 844px;
+
+  /* Overlays & Typography details */
+  --color-scrim: rgba(0, 0, 0, 0.6);
+  --letter-spacing-label: 0.05em;
+
+  /* Shadows */
+  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 -4px 24px rgba(0, 0, 0, 0.5);
 
   /* Safe Area */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);

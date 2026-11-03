@@ -97,8 +97,8 @@ watch(
   (dish) => {
     if (dish) {
       formName.value = dish.name;
-      formCookedWeightG.value = dish.cooked_weight_g;
-      formRemainingG.value = dish.remaining_g;
+      formCookedWeightG.value = dish.cooked_weight_g ?? null;
+      formRemainingG.value = dish.remaining_g ?? null;
       formCookedOn.value = dish.cooked_on || '';
       formNotes.value = dish.notes || '';
       components.value = (dish.components || []).map((c) => ({

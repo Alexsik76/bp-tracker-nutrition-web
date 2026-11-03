@@ -6,11 +6,7 @@ import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import SegmentedControl from '../components/SegmentedControl.vue';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
-import MealScheduleEditor from '../components/profile/MealScheduleEditor.vue';
-import PinnedMealsSection from '../components/profile/PinnedMealsSection.vue';
-import { normalizeTime24, isValidTime24 } from '../utils/date';
-import type { NutritionProfileUpsert, MealSchedule } from '../types/nutrition';
-import { mealTypeLabel } from '../utils/mealTypes';
+import type { NutritionProfileUpsert } from '../types/nutrition';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -27,11 +23,6 @@ const targetWeightKg = ref<number>(110);
 const paceKgPerWeek = ref<number>(0.75);
 const restrictions = ref<string>('');
 const dislikes = ref<string>('');
-const meals = ref<MealSchedule[]>([
-  { type: 'breakfast', time: '08:30' },
-  { type: 'lunch', time: '13:30' },
-  { type: 'dinner', time: '19:00' },
-]);
 
 const sexOptions = [
   { label: 'Чоловік', value: 'male' },
@@ -51,9 +42,6 @@ async function loadProfile() {
       paceKgPerWeek.value = profile.pace_kg_per_week;
       restrictions.value = profile.restrictions || '';
       dislikes.value = profile.dislikes || '';
-      if (profile.meals && profile.meals.length > 0) {
-        meals.value = JSON.parse(JSON.stringify(profile.meals));
-      }
     }
   } catch (err) {
     console.error('Error loading profile:', err);
@@ -64,27 +52,6 @@ async function loadProfile() {
 }
 
 async function saveProfile() {
-  const normalizedMeals = meals.value.map((m) => ({
-    type: m.type,
-    time: normalizeTime24(m.time),
-  }));
-
-  if (new Set(normalizedMeals.map((m) => m.type)).size !== normalizedMeals.length) {
-    toastStore.show('Кожен тип прийому може бути в розкладі лише один раз', 'warning');
-    return;
-  }
-
-  for (const m of normalizedMeals) {
-    if (!m.type) {
-      toastStore.show('Оберіть тип для всіх прийомів їжі', 'warning');
-      return;
-    }
-    if (!isValidTime24(m.time)) {
-      toastStore.show(`Вкажіть коректний час у форматі 24г (ГГ:ХХ) для «${mealTypeLabel(m.type)}»`, 'warning');
-      return;
-    }
-  }
-
   saving.value = true;
   try {
     const payload: NutritionProfileUpsert = {
@@ -96,7 +63,6 @@ async function saveProfile() {
       pace_kg_per_week: Number(paceKgPerWeek.value),
       restrictions: restrictions.value.trim() || null,
       dislikes: dislikes.value.trim() || null,
-      meals: normalizedMeals,
     };
 
     await nutritionApi.upsertProfile(payload);
@@ -107,6 +73,10 @@ async function saveProfile() {
   } finally {
     saving.value = false;
   }
+}
+
+function goBack() {
+  router.push('/menu');
 }
 
 async function handleLogout() {
@@ -124,6 +94,11 @@ onMounted(() => {
 <template>
   <div class="profile-view">
     <div class="view-header">
+      <button type="button" class="btn-back" @click="goBack" aria-label="Назад">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
       <h1 class="view-title">Профіль харчування</h1>
     </div>
 
@@ -254,12 +229,6 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Meal Schedule -->
-      <MealScheduleEditor v-model="meals" />
-
-      <!-- Pinned Meals -->
-      <PinnedMealsSection :schedule-meals="meals" />
-
       <!-- Save Button -->
       <button
         type="submit"
@@ -295,13 +264,32 @@ onMounted(() => {
 }
 
 .view-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
   margin-bottom: var(--space-16);
 }
 
+.btn-back {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+}
+
+.btn-back:hover {
+  color: var(--color-text-primary);
+}
+
 .view-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
 }
 
 .user-brief-card {
@@ -312,36 +300,36 @@ onMounted(() => {
 }
 
 .user-avatar {
-  width: 44px;
-  height: 44px;
+  width: var(--space-40);
+  height: var(--space-40);
   border-radius: var(--radius-control);
-  background: var(--primary-bg-chip);
-  color: var(--primary);
+  background: var(--color-primary-chip);
+  color: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .user-email {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: var(--font-size-input);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 
 .user-name {
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 .field-hint {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
 }
 
 .btn-save {
   width: 100%;
-  font-size: 16px;
+  font-size: var(--font-size-md);
   margin-top: var(--space-8);
 }
 
