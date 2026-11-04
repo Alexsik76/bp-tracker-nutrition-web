@@ -1027,6 +1027,8 @@ onUnmounted(() => {
   white-space: nowrap;
   flex-shrink: 0;
   transition: background-color var(--transition-fast);
+  --spinner-color: var(--color-on-primary);
+  --spinner-track-color: var(--color-spinner-track-on-primary);
 }
 
 .btn-log-meal:hover:not(:disabled) {

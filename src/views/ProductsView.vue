@@ -675,6 +675,8 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   transition: background-color var(--transition-fast);
+  --spinner-color: var(--color-on-primary);
+  --spinner-track-color: var(--color-spinner-track-on-primary);
 }
 
 .btn-save:hover:not(:disabled) {
@@ -727,6 +729,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  --spinner-color: var(--color-on-primary);
+  --spinner-track-color: var(--color-spinner-track-on-primary);
 }
 
 .btn-submit:disabled {

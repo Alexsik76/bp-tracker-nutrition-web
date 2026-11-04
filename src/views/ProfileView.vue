@@ -595,6 +595,8 @@ onMounted(() => {
   justify-content: center;
   margin-top: var(--space-8);
   transition: background-color var(--transition-fast);
+  --spinner-color: var(--color-on-primary);
+  --spinner-track-color: var(--color-spinner-track-on-primary);
 }
 
 .btn-save-profile:hover:not(:disabled) {
