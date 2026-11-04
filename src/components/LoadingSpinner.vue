@@ -32,8 +32,8 @@ const props = withDefaults(
 }
 
 .spinner {
-  border: var(--spinner-border-width) solid var(--color-spinner-track);
-  border-top-color: var(--primary);
+  border: var(--spinner-border-width) solid var(--spinner-track-color, var(--color-spinner-track));
+  border-top-color: var(--spinner-color, var(--primary));
   border-radius: 50%;
   animation: spin var(--spinner-duration) linear infinite;
 }

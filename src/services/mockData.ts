@@ -478,6 +478,9 @@ export const mockNutritionApi = {
       meal = mockMeals.find((m) => m.id === menuId) || null;
     }
     if (!meal) throw new ApiError('Meal not found', 404);
+    if (meal.date && meal.date !== data.date) {
+      throw new ApiError('Неможливо зберегти пропозицію іншого дня', 409);
+    }
     meal.state = 'eaten';
     meal.eaten_at = data.at;
     meal.date = data.date;
@@ -501,7 +504,8 @@ export const mockNutritionApi = {
     return {
       date,
       meals: JSON.parse(JSON.stringify(dayMeals)),
-      suggestion: JSON.parse(JSON.stringify(mockCurrentSuggestion)),
+      suggestion:
+        mockCurrentSuggestion?.date === date ? JSON.parse(JSON.stringify(mockCurrentSuggestion)) : null,
       totals: {
         kcal: Math.round(totalKcal),
         protein_g: Math.round(totalProtein),

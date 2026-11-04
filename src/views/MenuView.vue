@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { nutritionApi } from '../services/api';
+import { nutritionApi, ApiError } from '../services/api';
 import { useToastStore } from '../stores/toast';
 import { formatLocalDate, nowLocalIso } from '../utils/date';
 import { mealTypeLabel } from '../utils/mealTypes';
@@ -89,13 +89,17 @@ const remainingKcalText = computed(() => {
 // Fetch Journal
 async function fetchJournal() {
   try {
-    const data = await nutritionApi.getJournal(formatLocalDate());
+    const localDate = formatLocalDate();
+    const data = await nutritionApi.getJournal(localDate);
     journalData.value = data;
-    if (data.suggestion) {
+    if (data.suggestion && (!data.suggestion.date || data.suggestion.date === localDate)) {
       currentSuggestion.value = data.suggestion;
       currentState.value = 'suggestion';
-    } else if (currentState.value === 'suggestion' && !currentSuggestion.value) {
-      currentState.value = 'request';
+    } else {
+      currentSuggestion.value = null;
+      if (currentState.value === 'suggestion') {
+        currentState.value = 'request';
+      }
     }
   } catch (err: unknown) {
     console.error('Failed to load journal:', err);
@@ -145,9 +149,33 @@ async function handleEat() {
   } catch (err: unknown) {
     console.error('Failed to mark meal as eaten:', err);
     toastStore.show(err instanceof Error ? err.message : 'Помилка збереження прийому їжі', 'error');
+    const status = err instanceof ApiError ? err.status : (err as { status?: number })?.status;
+    if (status === 409) {
+      currentSuggestion.value = null;
+      currentState.value = 'request';
+      await fetchJournal();
+    }
   } finally {
     submitting.value = false;
     submittingEat.value = false;
+  }
+}
+
+// State 2: Dismiss / delete suggestion
+async function handleDismissSuggestion() {
+  if (!currentSuggestion.value || submitting.value) return;
+  const suggestionId = currentSuggestion.value.id;
+  submitting.value = true;
+  try {
+    await nutritionApi.deleteMeal(suggestionId);
+    currentSuggestion.value = null;
+    currentState.value = 'request';
+    await fetchJournal();
+  } catch (err: unknown) {
+    console.error('Failed to delete suggestion:', err);
+    toastStore.show(err instanceof Error ? err.message : 'Помилка видалення пропозиції', 'error');
+  } finally {
+    submitting.value = false;
   }
 }
 
@@ -372,6 +400,27 @@ onUnmounted(() => {
           <!-- State 2: Suggestion -->
           <div v-else class="suggestion-state">
             <div class="suggestion-card">
+              <button
+                type="button"
+                class="btn-close-card"
+                aria-label="Закрити"
+                :disabled="submitting"
+                @click="handleDismissSuggestion"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
               <div class="meal-label">{{ currentMealLabel }}</div>
               <div class="dishes-list">
                 <div
@@ -719,6 +768,8 @@ onUnmounted(() => {
   justify-content: center;
   width: 100%;
   transition: background-color var(--transition-fast);
+  --spinner-color: var(--color-on-primary);
+  --spinner-track-color: var(--color-spinner-track-on-primary);
 }
 
 .btn-suggest-primary:hover:not(:disabled) {
@@ -737,6 +788,7 @@ onUnmounted(() => {
 }
 
 .suggestion-card {
+  position: relative;
   background-color: var(--color-surface);
   border-radius: var(--radius-card);
   padding: var(--space-18) var(--space-16) var(--space-14);
@@ -744,10 +796,37 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+.btn-close-card {
+  position: absolute;
+  top: var(--space-12);
+  right: var(--space-12);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast);
+}
+
+.btn-close-card:hover:not(:disabled),
+.btn-close-card:focus-visible:not(:disabled) {
+  color: var(--color-text-primary);
+}
+
+.btn-close-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .meal-label {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   margin-bottom: var(--space-12);
+  padding-right: var(--space-32);
 }
 
 .dishes-list {
@@ -810,6 +889,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   transition: background-color var(--transition-fast);
+  --spinner-color: var(--color-on-primary);
+  --spinner-track-color: var(--color-spinner-track-on-primary);
 }
 
 .btn-eat:hover:not(:disabled) {

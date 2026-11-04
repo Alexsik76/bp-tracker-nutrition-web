@@ -33,6 +33,7 @@
   --color-pill-hover-bg: rgba(255, 255, 255, 0.08);
   --color-segment-count-bg: rgba(255, 255, 255, 0.1);
   --color-spinner-track: rgba(255, 255, 255, 0.1);
+  --color-spinner-track-on-primary: rgba(10, 36, 64, 0.2);
   --color-drag-indicator: rgba(255, 255, 255, 0.2);
   --color-modal-backdrop: rgba(0, 0, 0, 0.75);
   --color-danger-border: rgba(239, 68, 68, 0.25);
@@ -86,6 +87,7 @@
   --on-primary: var(--color-on-primary);
   --primary-hover: var(--color-primary-hover);
   --primary-bg-chip: var(--color-primary-chip);
+  --spinner-track-on-primary: var(--color-spinner-track-on-primary);
 
   /* Spacing Scale */
   --space-0: 0px;
