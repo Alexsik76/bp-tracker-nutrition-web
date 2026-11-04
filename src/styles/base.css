@@ -103,6 +103,8 @@ button, input, select, textarea {
   background-color: var(--primary);
   color: var(--on-primary);
   border-color: var(--primary);
+  --spinner-color: var(--on-primary);
+  --spinner-track-color: var(--color-spinner-track-on-primary);
 }
 
 .btn-primary:hover {
