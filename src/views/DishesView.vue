@@ -226,13 +226,24 @@ const loadedNutrition = ref<{
 function normalizeNutrition(val: number | null | undefined | string): number | null {
   if (val === '' || val === null || val === undefined) return null;
   const num = typeof val === 'number' ? val : parseFloat(val);
-  return Number.isNaN(num) ? null : num;
+  return Number.isNaN(num) ? null : Math.round(num * 10) / 10;
+}
+
+function areNutritionValuesEqual(
+  a: number | null | undefined | string,
+  b: number | null | undefined | string
+): boolean {
+  const normA = normalizeNutrition(a);
+  const normB = normalizeNutrition(b);
+  if (normA === null && normB === null) return true;
+  if (normA === null || normB === null) return false;
+  return Math.abs(normA - normB) < 0.001;
 }
 
 function normalizeCookedWeight(val: number | null | undefined | string): number | null {
   if (val === '' || val === null || val === undefined) return null;
   const num = typeof val === 'number' ? val : parseFloat(val);
-  return Number.isNaN(num) || num <= 0 ? null : num;
+  return Number.isNaN(num) || num <= 0 ? null : Math.round(num);
 }
 
 const pinnedPortionText = computed(() => {
@@ -274,7 +285,7 @@ function openDishCard(dish: DishRead) {
     cooked_weight_g: dish.cooked_weight_g ?? null,
     note: dish.note || '',
     components: (dish.components || []).map((c) => ({
-      product_id: c.product_id,
+      name: c.name,
       weight_g: c.weight_g,
     })),
   };
@@ -333,15 +344,20 @@ async function handleSaveCard() {
 
   try {
     const nutritionChanged =
-      normalizeNutrition(cardForm.value.kcal) !== normalizeNutrition(loadedNutrition.value.kcal) ||
-      normalizeNutrition(cardForm.value.protein_g) !== normalizeNutrition(loadedNutrition.value.protein_g) ||
-      normalizeNutrition(cardForm.value.fat_g) !== normalizeNutrition(loadedNutrition.value.fat_g) ||
-      normalizeNutrition(cardForm.value.carbs_g) !== normalizeNutrition(loadedNutrition.value.carbs_g);
+      !areNutritionValuesEqual(cardForm.value.kcal, loadedNutrition.value.kcal) ||
+      !areNutritionValuesEqual(cardForm.value.protein_g, loadedNutrition.value.protein_g) ||
+      !areNutritionValuesEqual(cardForm.value.fat_g, loadedNutrition.value.fat_g) ||
+      !areNutritionValuesEqual(cardForm.value.carbs_g, loadedNutrition.value.carbs_g);
 
     const payload: DishUpdate = {
       name: cardForm.value.name.trim(),
       note: cardForm.value.note.trim() || null,
-      components: cardForm.value.components,
+      components: cardForm.value.components
+        .map((c) => ({
+          name: c.name.trim(),
+          weight_g: Number(c.weight_g),
+        }))
+        .filter((c) => c.name.length > 0 && c.weight_g > 0),
       cooked_weight_g: normalizeCookedWeight(cardForm.value.cooked_weight_g),
     };
 
@@ -688,7 +704,7 @@ onMounted(() => {
               <input
                 v-model.number="cardForm.kcal"
                 type="number"
-                step="1"
+                step="0.1"
                 min="0"
                 class="form-input num-mono"
                 placeholder="ккал"
@@ -742,7 +758,10 @@ onMounted(() => {
         </div>
 
         <!-- Optional Composition -->
-        <DishComponentsEditor v-model="cardForm.components" />
+        <DishComponentsEditor
+          v-model="cardForm.components"
+          :all-dishes="dishes"
+        />
 
         <div class="form-group">
           <label class="form-label" for="cardDishCookedWeight">Вага готової страви, г</label>

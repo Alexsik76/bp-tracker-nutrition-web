@@ -38,14 +38,8 @@ export type MealType =
   | 'afternoon_snack'
   | 'evening_snack';
 
-export interface NewProductInput {
-  name: string;
-  available?: boolean;
-  note?: string | null;
-}
-
 export interface DishComponentBase {
-  product_id: string;
+  name: string;
   weight_g: number;
 }
 
@@ -55,8 +49,7 @@ export interface DishComponentRead extends DishComponentBase {
 }
 
 export interface DishComponentCreate {
-  product_id?: string | null;
-  new_product?: NewProductInput | null;
+  name: string;
   weight_g: number;
 }
 
